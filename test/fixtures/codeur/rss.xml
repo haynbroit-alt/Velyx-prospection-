@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Tous les projets</title>
+    <description/>
+    <lastBuildDate>Sun, 15 Nov 2026 20:01:42 +0100</lastBuildDate>
+    <link>https://www.codeur.com/projects.rss</link>
+    <item>
+      <title>Animation de réseaux sociaux fictive</title>
+      <link>https://www.codeur.com/projects/492955-animation-de-reseaux-sociaux-fictive</link>
+      <pubDate>Sun, 15 Nov 2026 21:06:22 +0100</pubDate>
+      <guid>492955</guid>
+      <description type="html">
+        <![CDATA[<p>Budget : 500 € à 1 000 € - Catégories : Rédaction, Community management, Marketing</p> <p> Texte inventé : une agence fictive cherche deux animateurs de réseaux sociaux … </p> <p> <a href="https://www.codeur.com/projects/492955-animation-de-reseaux-sociaux-fictive">Voir ce projet sur Codeur</a></p>]]>
+      </description>
+    </item>
+    <item>
+      <title>Flyer recto/verso fictif d&#39;une offre</title>
+      <link>https://exemple.invalid/ailleurs</link>
+      <pubDate>Sun, 15 Nov 2026 19:32:34 +0100</pubDate>
+      <guid isPermaLink="false">492954</guid>
+      <description type="html">
+        <![CDATA[<p>Budget : 1 000 € à 10 000 € - Catégories : Charte graphique, Publicité, Print (flyer, plaquette, affiche...)</p> <p> Création d&#39;un flyer fictif A5 recto/verso … </p> <p> <a href="https://www.codeur.com/projects/492954-flyer">Voir ce projet sur Codeur</a></p>]]>
+      </description>
+    </item>
+  </channel>
+</rss>

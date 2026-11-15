@@ -1,0 +1,81 @@
+{
+ "id": "rachat-it-idf",
+ "annonce": "https://www.codeur.com/projects/492253-prospection-et-developpement-externe-ile-de-france-bruxelles",
+ "besoin": "Identifier des indépendants et micro-entreprises IT (moins de 5 salariés) en Île-de-France pour des partenariats ou le rachat de portefeuilles clients.",
+ "params": {
+  "activite_principale": "62.01Z,62.02A,62.03Z,62.09Z",
+  "region": "11",
+  "tranche_effectif_salarie": "00,01,02",
+  "etat_administratif": "A",
+  "date_naissance_personne_max": {
+   "expr": "annee-62-12-31"
+  }
+ },
+ "garder": {
+  "departements": [
+   "75",
+   "77",
+   "78",
+   "91",
+   "92",
+   "93",
+   "94",
+   "95"
+  ],
+  "exclure_categories": [
+   "GE",
+   "ETI"
+  ],
+  "ca_max": 2000000,
+  "age_dirigeant_min": 62
+ },
+ "cible_taille": "micro",
+ "vise_dirigeant": false,
+ "exceptions_ratio": [],
+ "signaux": [
+  {
+   "primitive": "dirigeant_age_min",
+   "args": [
+    62
+   ],
+   "signal": "transmission",
+   "justification": "dirigeant de 62 ans ou plus : la question de la transmission se pose, sans repreneur interne dans une structure de moins de 5 salariés (indice, pas une intention de vendre)"
+  },
+  {
+   "primitive": "creation_plus_de_ans",
+   "args": [
+    15
+   ],
+   "signal": "portefeuille",
+   "justification": "société créée il y a 15 ans ou plus : clientèle installée, donc un portefeuille à reprendre"
+  },
+  {
+   "primitive": "resultat_positif_recent",
+   "args": [
+    3
+   ],
+   "signal": "rentable",
+   "justification": "résultat net positif sur un exercice de moins de 3 ans : portefeuille rentable (les comptes plus anciens ne comptent pas)"
+  },
+  {
+   "primitive": "sans_codirigeant_moins_de",
+   "args": [
+    50
+   ],
+   "signal": "sans_successeur",
+   "court": "sans successeur inscrit",
+   "justification": "aucun dirigeant inscrit de moins de 50 ans : pas de successeur interne visible au registre"
+  }
+ ],
+ "complet": {
+  "ca_recent": false,
+  "dirigeant_principal": true
+ },
+ "gabarit": "rachat-it-idf",
+ "limites": [
+  "Bruxelles, demandé par le client, n’est pas couvert (registre belge BCE non interrogé).",
+  "L’âge du dirigeant est un indice de transmission, pas une intention de vendre."
+ ],
+ "auteur": "humain",
+ "statut": "active"
+}

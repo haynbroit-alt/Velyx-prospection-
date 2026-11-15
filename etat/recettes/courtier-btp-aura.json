@@ -1,0 +1,76 @@
+{
+ "id": "courtier-btp-aura",
+ "annonce": "https://www.codeur.com/projects/492531-prise-de-rdv-physiques-entreprises-du-btp-rhone-alpes",
+ "besoin": "Dirigeants du BTP (5 à 100 salariés) en Rhône-Alpes pour un courtier en assurance ; priorité aux entreprises récentes, aux nouvelles activités (photovoltaïque, isolation par l’extérieur) et aux promoteurs ; CA et nom du dirigeant exigés.",
+ "params": {
+  "activite_principale": "43.99C,41.20A,41.20B,43.12A,43.12B,43.11Z,43.91A,43.91B,43.99A,43.32A,43.32B,43.31Z,43.33Z,43.34Z,43.29A,43.39Z,43.21A,43.22A,43.22B,43.29B,41.10A,42.11Z,42.21Z,71.12B",
+  "departement": "69,38,42,01,73,74,26,07",
+  "tranche_effectif_salarie": "03,11,12,21",
+  "etat_administratif": "A",
+  "categorie_entreprise": "PME"
+ },
+ "garder": {
+  "departements": [
+   "69",
+   "38",
+   "42",
+   "01",
+   "73",
+   "74",
+   "26",
+   "07"
+  ],
+  "categories": [
+   "PME"
+  ]
+ },
+ "cible_taille": "pme",
+ "vise_dirigeant": true,
+ "exceptions_ratio": [
+  "41.10A",
+  "41.20A",
+  "41.20B"
+ ],
+ "signaux": [
+  {
+   "primitive": "creation_moins_de_ans",
+   "args": [
+    3
+   ],
+   "signal": "recente",
+   "court": "récente",
+   "justification": "immatriculée depuis moins de 3 ans (création ou reprise, à vérifier) : cas « entreprise récente » que le client cite en premier ; la décennale doit être justifiée à l’ouverture de tout chantier (C. assurances, art. L241-1)"
+  },
+  {
+   "primitive": "rge",
+   "args": [],
+   "signal": "rge",
+   "justification": "qualifiée RGE : activités que le client cite comme à faire assurer (photovoltaïque, isolation, pompes à chaleur)"
+  },
+  {
+   "primitive": "naf_prefixe",
+   "args": [
+    [
+     "41.10",
+     "41.20"
+    ]
+   ],
+   "signal": "operation",
+   "court": "promoteur/constructeur",
+   "justification": "promoteur ou constructeur : chaque opération exige dommages-ouvrage, tous risques chantier ou garantie d’achèvement"
+  }
+ ],
+ "prioritaire": "recente",
+ "complet": {
+  "ca_recent": true,
+  "dirigeant_principal": true
+ },
+ "gabarit": "courtier-btp-aura",
+ "limites": [
+  "La lecture du registre s’arrête au plafond de pages : les comptes sont alors des minimums.",
+  "Les entreprises très récentes dont l’effectif n’est pas encore connu de l’INSEE (tranche NN) ne sont pas interrogées : le signal « récente » est sous-compté.",
+  "Une immatriculation récente peut être une reprise : à vérifier sur la fiche officielle."
+ ],
+ "auteur": "humain",
+ "statut": "active"
+}
