@@ -1,0 +1,11 @@
+{
+  "source": "message du propriétaire, 15 novembre 2026 : « Au début, VELYX Ω doit fonctionner avec 0 € d'investissement. Il doit exploiter au maximum les ressources gratuites disponibles et chercher à générer ses premiers revenus avant toute dépense. Les investissements ne seront envisagés qu'après les premiers encaissements et avec mon accord. »",
+  "depense": {
+    "avant_premier_encaissement": "interdit",
+    "apres_premier_encaissement": "revue_humaine",
+    "plafond_eur": 0
+  },
+  "contacts": "brouillons",
+  "publication": "revue_humaine",
+  "note": "Seul le propriétaire modifie ce fichier. Le Risk Agent le lit à chaque décision ; une action absente de la politique va en revue humaine."
+}
