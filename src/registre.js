@@ -4,8 +4,9 @@
 import fs from 'node:fs';
 import crypto from 'node:crypto';
 
-const TYPES = ['observation', 'cible', 'pari', 'brouillon', 'envoi', 'reponse', 'encaissement', 'depense', 'aveu', 'lecon'];
+const TYPES = ['mandat', 'observation', 'cible', 'pari', 'brouillon', 'envoi', 'reponse', 'encaissement', 'depense', 'aveu', 'lecon'];
 const EXIGE = {
+  mandat: ['texte', 'source', 'regle'],
   observation: ['source', 'mesure'],
   cible: ['recette', 'compte', 'fichier_prive'],
   pari: ['hypothese', 'geste_proprietaire', 'critere_succes', 'critere_arret', 'echeance'],
