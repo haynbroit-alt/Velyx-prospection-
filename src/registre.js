@@ -288,6 +288,9 @@ export class Registre {
     const de = (t) => this.lignes.filter((l) => l.type === t);
     const somme = (ls) => ls.reduce((s, l) => s + (typeof l.montant_eur === 'number' && Number.isFinite(l.montant_eur) ? l.montant_eur : 0), 0);
     const encaissements = de('encaissement').filter((l) => l.auteur === 'proprietaire');
+    // Revues rendues caduques (remplacée, opposition, annonce close, expirée) : le pari « P-<R-id> » non envoyé qui en
+    // dépend n'est plus jouable. Sinon le propriétaire pourrait envoyer une version périmée du texte.
+    const revuesCaduques = new Set(de('decision').filter((d) => d.action === 'invalider_revue' && typeof d.revue === 'string').map((d) => d.revue));
     const paris = de('pari').map((p) => {
       const envois = de('envoi').filter((e) => e.pari === p.id);
       const issues = de('reponse').filter((r) => r.pari === p.id).map((r) => r.issue);
@@ -295,7 +298,8 @@ export class Registre {
       const statut = issues.some((i) => ISSUES_POSITIVES.includes(i)) ? 'gagne'
         : issues.some((i) => i === 'refus' || i === 'sans_reponse') || clotures.some((c) => c.motif === 'perdu') ? 'perdu'
           : clotures.some((c) => c.motif === 'caduc') ? 'caduc'
-            : envois.length ? 'envoye' : 'ouvert';
+            : envois.length ? 'envoye'
+              : typeof p.id === 'string' && p.id.startsWith('P-R-') && revuesCaduques.has(p.id.slice(2)) ? 'caduc' : 'ouvert';
       return {
         id: p.id, hypothese: p.hypothese, echeance: p.echeance, envoye: envois.length > 0, issues, geste: p.geste_proprietaire,
         canal: envois.at(-1)?.canal ?? p.canal ?? null, statut, echeance_le: echeanceLe(p.echeance, envois[0]?.date ?? null),

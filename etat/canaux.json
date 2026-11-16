@@ -3,10 +3,11 @@
   "role": "observation",
   "cout_envoi": "payant : abonnement d’au moins 31,90 € HT par 30 jours et 4 % de commission (page tarifs lue le 15/11, ligne 13)",
   "statut": "exclu",
-  "cgu": "inconnue",
+  "cgu": "lue_interdite",
   "preuves": [
    13,
-   14
+   14,
+   56
   ],
   "payant": true,
   "geste": "aucun : exclu par le mandat 0 € (ligne 14)"
