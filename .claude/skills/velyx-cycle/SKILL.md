@@ -68,7 +68,8 @@ aucun message.
 Pour chaque fichier `prive/revues/R-<jour>-*.md` créé aujourd'hui : créer un document dans le Google Drive du
 propriétaire (connecteur Google Drive, `create_file`), titre « VELYX — <R-id> », contenu = le fichier tel quel, dans le
 dossier « VELYX — revues » s'il existe (sinon à la racine). Ne jamais partager, déplacer ni supprimer un fichier Drive.
-Aucun fichier de `prive/listes/` ni `prive/cache/` ne part dans Drive.
+Aucun fichier de `prive/listes/` ni `prive/cache/` ne part dans Drive. Si le connecteur Google Drive n'est pas disponible
+dans la session : sauter ce pas et écrire dans le résumé « revues non remises (Drive indisponible) : <R-id…> ».
 
 ## Pas 8. Conserver l'état public (autorisation du propriétaire du 15/11/2026)
 
