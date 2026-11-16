@@ -42,7 +42,7 @@ test('codeur : une annonce est lue champ par champ, sans rien deviner', () => {
 });
 
 const fiche = (o) => ({ siren: '1', nom_complet: 'X', activite_principale: '62.02A', date_creation: '1995-01-01', tranche_effectif_salarie: '01',
-  categorie_entreprise: 'PME', siege: { departement: '75', libelle_commune: 'PARIS' },
+  categorie_entreprise: 'PME', siege: { departement: '75', libelle_commune: 'PARIS' }, opposition_diffusion_commerciale: false, statut_diffusion: 'O',
   dirigeants: [{ type_dirigeant: 'personne physique', qualite: 'Gérant', nom: 'A', prenoms: 'B', annee_de_naissance: '1958' }],
   finances: { 2025: { ca: 500000, resultat_net: 20000 }, 2019: { ca: 1, resultat_net: -1 } }, ...o });
 

@@ -12,7 +12,7 @@ import { classerAnnonce } from './monde.js';
 const HEURE = 3.6e6, GRAND = 1e9;
 /** Seuils écrits d'avance (spec M8). */
 export const SEUILS = Object.freeze({ offres: 5, devis_2h: 3, fraicheur_h: 336, n_min: 20, horizon_ferme_h: 72, horizon_offres_h: 24,
-  regeneration_max: 60, cycles_gel: 5, lecture_rassise_h: 168, urgence_h: 24, wip_max: 2, nouvelles_max: 1, recettes_semaine: 1 });
+  regeneration_max: 60, cycles_gel: 5, lecture_rassise_h: 168, urgence_h: 24, wip_max: 2, nouvelles_max: 1, recettes_semaine: 1, echantillons_vides: 3 });
 export const CHEMINS = Object.freeze({ cgu_codeur: '/pages/termes-et-conditions-d-utilisation', tarifs_codeur: '/pages/tarifs-codeur-com' });
 
 /** État initial des canaux (lignes 13, 14 et 15 du registre). `payant` : un envoi coûte avant tout encaissement (D9). */
@@ -105,28 +105,53 @@ export function recetteProche(a, recettes = {}) {
   return meilleur;
 }
 
-/** Canaux qui pourraient atteindre l'auteur d'une annonce codeur : codeur lui-même s'il n'est pas exclu, l'e-mail direct si les CGU codeur ne l'interdisent pas. */
+/**
+ * R-23 : contacter hors de la plateforme l'auteur d'une annonce codeur n'est permis que si les CGU codeur ont été lues,
+ * citées, et ne l'interdisent pas (« lue_compatible »). Inconnues, ambiguës ou interdisantes : jamais.
+ */
+export const contactHorsCodeurPermis = (canaux) => canaux?.codeur?.cgu === 'lue_compatible';
+/** Une opportunité née d'une annonce codeur (son auteur est un client codeur). */
+export const clientCodeur = (o) => o?.client_codeur === true || (o?.annonce_id !== undefined && o?.annonce_id !== null && o.annonce_id !== '');
+
+/** Canaux qui pourraient atteindre l'auteur d'une annonce codeur : codeur lui-même s'il n'est pas exclu, l'e-mail direct seulement si les CGU codeur l'autorisent (R-23). */
 export function canauxPour(canaux) {
   const out = [];
   for (const id of ['codeur', 'email_direct']) {
     const c = canaux?.[id];
     if (!c || c.statut === 'exclu' || c.statut === 'ferme') continue;
-    if (id === 'email_direct' && canaux.codeur?.cgu === 'lue_interdite') continue;
+    if (id === 'email_direct' && !contactHorsCodeurPermis(canaux)) continue;
     out.push(id);
   }
   return out;
 }
 
-/** Canal utilisable pour une opportunité (D2, D9) : canal ouvert et non payant tant que rien n'est encaissé, ou e-mail direct vers un client identifiable. */
-export function canalUtilisable(o, canaux, encaisse_eur = 0) {
+/**
+ * Canal utilisable pour une opportunité (D2, D9) : canal ouvert et non payant (un canal payant est une dépense : jamais
+ * utilisable tant que politique.json plafond_eur ne couvre pas son coût, quel que soit l'encaissé déclaré), ou e-mail
+ * direct vers un client identifiable. Vers un client codeur, l'e-mail direct exige des CGU lues et compatibles (R-23).
+ */
+export function canalUtilisable(o, canaux, encaisse_eur = 0, { plafond_eur = 0 } = {}) {
   for (const id of o?.canaux_possibles ?? []) {
     const c = canaux?.[id];
-    if (!c || c.statut === 'exclu' || c.statut === 'ferme' || (c.payant && !(encaisse_eur > 0))) continue;
+    if (!c || c.statut === 'exclu' || c.statut === 'ferme' || (c.payant && !depensePermise(id, encaisse_eur, plafond_eur))) continue;
+    if (id === 'email_direct' && clientCodeur(o) && !contactHorsCodeurPermis(canaux)) continue;
     if (c.statut === 'ouvert') return id;
-    if (id === 'email_direct' && canaux.codeur?.cgu !== 'lue_interdite' && o.client_identifiable === true) return id;
+    if (id === 'email_direct' && o.client_identifiable === true) return id;
   }
   return null;
 }
+
+/**
+ * Un canal payant engage une dépense (abonnement) : permise seulement après un encaissement ET dans la limite de
+ * politique.json plafond_eur (relevé par le propriétaire seul), pour au moins son coût minimal connu. Un coût inconnu
+ * n'est jamais couvert. Un geste ou un encaissement déclaré en session ne suffit donc pas à l'ouvrir.
+ */
+export function depensePermise(id, encaisse_eur = 0, plafond_eur = 0) {
+  const cout = COUT_MIN_CANAL[id];
+  return encaisse_eur > 0 && Number.isFinite(plafond_eur) && Number.isFinite(cout) && cout > 0 && plafond_eur >= cout;
+}
+/** Coût minimal connu d'un canal payant, en euros HT (codeur : abonnement de 31,90 € par 30 jours, page tarifs, ligne 13). */
+const COUT_MIN_CANAL = Object.freeze({ codeur: 31.9 });
 
 const budgetTexte = (b) => (typeof b?.texte === 'string' && b.texte.trim() ? b.texte.trim() : 'non lu');
 const PREVISIONS = [
@@ -256,10 +281,17 @@ export function calculerCanaux(registre, pages_lues = []) {
   return canaux;
 }
 
-/** Préalables ouverts : statut pour facturer (B09), canal gratuit ouvert, CGU codeur (lues par l'agent, pas par le propriétaire). */
-export function prealablesOuverts(monde, canaux) {
+/** Références des préalables connus (fiche « prealable » de ref statut, canal ou cgu:codeur). */
+export const SUJETS_PREALABLE = Object.freeze(['statut', 'canal', 'cgu:codeur']);
+/**
+ * Préalables ouverts : statut pour facturer (B09), canal gratuit ouvert, CGU codeur (lues par l'agent, pas par le
+ * propriétaire). statut_proprietaire (dernier geste « statut » du registre) : micro ou societe satisfait le préalable dès
+ * le geste, sans attendre que RÉVISER ait passé B09 en « observee » (même règle que monde.reviser).
+ */
+export function prealablesOuverts(monde, canaux, { statut_proprietaire = null } = {}) {
   const out = [];
-  if ((monde?.croyances ?? []).find((c) => c.id === 'B09')?.niveau !== 'observee') out.push({ ref: 'statut', sujet: 'statut', motif: 'statut pour facturer inconnu (B09)' });
+  const statutDeclare = /^(micro|societe|société|micro-entreprise)/.test(String(statut_proprietaire ?? '').toLowerCase());
+  if ((monde?.croyances ?? []).find((c) => c.id === 'B09')?.niveau !== 'observee' && !statutDeclare) out.push({ ref: 'statut', sujet: 'statut', motif: 'statut pour facturer inconnu (B09)' });
   if (!Object.values(canaux ?? {}).some((c) => c.statut === 'ouvert' && !c.payant)) out.push({ ref: 'canal', sujet: 'canal', motif: 'aucun canal gratuit ouvert (B07)' });
   if ((canaux?.codeur?.cgu ?? 'inconnue') === 'inconnue') out.push({ ref: 'cgu:codeur', sujet: 'cgu', motif: 'CGU codeur non lues (B08)' });
   return out;
@@ -280,7 +312,7 @@ const comparer = (a, b) => {
  * dès wip_max propositions ouvertes (D3) ; nouvelles_max opportunités au plus dans la file (D4) ; les autres sont écartées.
  * Extensions : chaque Item porte `type` et `objet` (l'élément d'origine) ; encaisse_eur sert au critère 3 (D9).
  */
-export function prioriser({ opportunites = [], risques = [], revues_ouvertes = [], canaux = {}, prealables = [], encaisse_eur = 0 } = {},
+export function prioriser({ opportunites = [], risques = [], revues_ouvertes = [], canaux = {}, prealables = [], encaisse_eur = 0, plafond_eur = 0 } = {},
   { wip_max = SEUILS.wip_max, nouvelles_max = SEUILS.nouvelles_max } = {}) {
   const items = [], ecartees = [];
   for (const r of risques) {
@@ -297,7 +329,7 @@ export function prioriser({ opportunites = [], risques = [], revues_ouvertes = [
   const opps = [];
   for (const o of opportunites) {
     if (enRevue.has(String(o.annonce_id))) { ecartees.push({ ref: `annonce:${o.annonce_id}`, motif: 'déjà en revue' }); continue; }
-    const canal = canalUtilisable(o, canaux, encaisse_eur), raisons = [];
+    const canal = canalUtilisable(o, canaux, encaisse_eur, { plafond_eur }), raisons = [];
     const c3 = canal ? 0 : 1, c4 = o.preuve_legere ? 0 : 1;
     const c5 = typeof o.offres === 'number' && o.offres <= SEUILS.offres ? 0 : 1, c6 = typeof o.devis_2h_n === 'number' && o.devis_2h_n <= SEUILS.devis_2h ? 0 : 1;
     if (!c3) raisons.push(`canal utilisable : ${canal}`);
@@ -320,15 +352,15 @@ export function prioriser({ opportunites = [], risques = [], revues_ouvertes = [
 
 export const REGLES_CEO = Object.freeze({
   D0: 'un constat bloquant ne laisse que réparation et aveu',
-  D1: 'statut inconnu ou aucun canal ouvert : preparer_prealable, une fiche par sujet, jamais dupliquée',
-  D2: 'rediger_brouillon seulement si un canal est utilisable pour la cible, sinon preparer_kit_canal pour le segment',
+  D1: 'statut inconnu ou aucun canal ouvert : preparer_prealable, une fiche par sujet, jamais dupliquée ; un préalable satisfait clôt sa fiche (invalider_revue, motif « satisfait »)',
+  D2: 'rediger_brouillon seulement si un canal est utilisable pour la cible, sinon preparer_kit_canal pour le segment ; e-mail aux courtiers d’un département dès que ses deux listes sont prêtes et l’e-mail direct ouvert',
   D3: '2 propositions ouvertes ou plus : aucune nouvelle, relance par la notification',
   D4: 'une nouvelle opportunité par jour au plus',
-  D5: 'preuve légère d’abord (sonder puis echantillonner) ; construire_liste après une issue positive, sauf régénération de 60 requêtes au plus',
+  D5: 'preuve légère d’abord (sonder puis echantillonner) ; rédiger seulement sur un échantillon qui a retenu des fiches, sinon un nouvel échantillon par jour au plus, et la recette est écartée après 3 échantillons vides ; construire_liste après une issue positive, sauf régénération de 60 requêtes au plus',
   D6: 'annonce d’une revue qui n’est plus Ouvert, ou lecture de plus de 7 j : invalider_revue, leçon due',
   D7: 'pari envoyé depuis 7 j sans issue : demander_issue, jamais une clôture perdu',
   D8: '5 cycles sans geste du propriétaire : gel des nouvelles opportunités (veille seule)',
-  D9: 'encaissé nul : aucune action de dépense',
+  D9: 'encaissé nul, ou dépense au-delà de politique.json plafond_eur : aucune action de dépense (un canal payant en est une)',
   D10: 'une recette candidate du LLM par semaine au plus',
 });
 const PROPOSABLES = new Set(['ecrire_lecon', 'adopter_regle', 'reviser_croyance', 'purger_opposition', 'sauver_memoire', 'notifier', 'invalider_revue',
@@ -337,12 +369,19 @@ const recetteDuPari = (p) => p?.recette ?? /^P-(.+)-\d{4}-\d{2}-\d{2}$/.exec(Str
 const RE_ARGENT = /(^|_)(eur|euros?|montant)($|_)/i;
 // Actions qui passent par un canal d'envoi : un canal payant y engagerait une dépense (lire ou observer codeur, non).
 const PAR_CANAL = new Set(['rediger_brouillon', 'regenerer_brouillon', 'creer_brouillon_gmail']);
-function depense(type, params, canaux, encaisse_eur) {
-  if (encaisse_eur > 0) return false;
-  if (PAR_CANAL.has(type) && params?.canal && canaux?.[params.canal]?.payant) return true;
-  const marcher = (x) => x && typeof x === 'object' && Object.entries(x).some(([k, v]) => (RE_ARGENT.test(k) && typeof v === 'number' && v > 0) || marcher(v));
-  return marcher(params);
+// D9 : une action engage une dépense si elle passe par un canal payant ou porte un montant. Elle n'est gardée qu'après un
+// encaissement ET dans la limite de politique.json plafond_eur (que seul le propriétaire relève) : un encaissement déclaré
+// en session, à lui seul, n'ouvre aucune dépense.
+function depense(type, params, canaux, encaisse_eur, plafond_eur = 0) {
+  if (PAR_CANAL.has(type) && params?.canal && canaux?.[params.canal]?.payant) return !depensePermise(params.canal, encaisse_eur, plafond_eur);
+  const montants = [];
+  const marcher = (x) => { if (x && typeof x === 'object') for (const [k, v] of Object.entries(x)) { if (RE_ARGENT.test(k) && typeof v === 'number' && v > 0) montants.push(v); else marcher(v); } };
+  marcher(params);
+  if (!montants.length) return false;
+  return !(encaisse_eur > 0 && Number.isFinite(plafond_eur) && montants.every((m) => m <= plafond_eur));
 }
+/** Actions nées d'une annonce codeur (ref = id d'annonce) qui passent par un canal : leur destinataire est un client codeur (R-23). */
+const RE_ANNONCE = /^\d{1,9}$/;
 
 /**
  * Actions du cycle. etat : {monde, canaux, revues_ouvertes, paris (Registre.etat().paris, avec recette éventuelle),
@@ -352,11 +391,13 @@ function depense(type, params, canaux, encaisse_eur) {
  */
 export function decider(file, etat = {}) {
   const { monde = null, canaux = {}, revues_ouvertes = [], paris = [], encaisse_eur = 0, cycles_sans_geste = 0, constats_bloquants = [], budget_reste = null,
-    recettes = {}, horloge = null, propositions = [], nouvelles_aujourdhui = 0 } = etat;
+    recettes = {}, horloge = null, propositions = [], nouvelles_aujourdhui = 0, plafond_eur = 0, statut_proprietaire = null, courtiers = [], revues = [] } = etat;
   const h = horloge ?? creerHorloge(), now = h.iso(), jour = h.jour(), cycle = etat.cycle ?? `C-${jour}`;
   const brutes = [], vues = new Set(), motifs = [];
-  const pousser = (type, ref, params, raison, jugement = null) => {
+  const pousser = (type, ref, params0, raison, jugement = null) => {
     if (!TYPES_ACTION.includes(type)) throw new Error(`decider : type d’action inconnu « ${type} »`);
+    // R-23 : un brouillon né d'une annonce codeur s'adresse à un client codeur ; le Risk Agent en décide sur ce drapeau.
+    const params = PAR_CANAL.has(type) && RE_ANNONCE.test(String(ref ?? '')) ? { ...(params0 ?? {}), client_codeur: true } : params0;
     const cle = empreinte({ type, ref: ref ?? null, params: params ?? {} });
     if (vues.has(cle)) return;
     vues.add(cle); brutes.push({ type, ref: ref ?? null, params: params ?? {}, raison, jugement, cle });
@@ -389,9 +430,15 @@ export function decider(file, etat = {}) {
   }
 
   // D1 : préalables, une fiche par sujet ; CGU codeur lues par l'agent (B08).
-  for (const p of prealablesOuverts(monde, canaux)) {
+  for (const p of prealablesOuverts(monde, canaux, { statut_proprietaire })) {
     if (p.sujet === 'cgu') pousser('lire_cgu', 'codeur', { canal: 'codeur', chemin: CHEMINS.cgu_codeur }, 'B08 : CGU codeur non lues (1 lecture, citations vérifiées)', { type: 'lire_cgu', statut: 'demande' });
     else if (!revueOuverte('prealable', p.ref)) pousser('preparer_prealable', p.ref, { sujet: p.sujet }, `D1 : ${p.motif} ; une seule fiche`);
+  }
+  // D1 (suite) : une fiche de préalable encore ouverte dont le sujet est satisfait (statut déclaré, canal gratuit ouvert,
+  // CGU lues) est close : la notification et les KPI ne redemandent plus un geste déjà fait.
+  const prealablesRestants = new Set(prealablesOuverts(monde, canaux, { statut_proprietaire }).map((p) => p.ref));
+  for (const r of ouvertes.filter((x) => x.type === 'prealable' && SUJETS_PREALABLE.includes(String(x.ref)) && !prealablesRestants.has(String(x.ref)))) {
+    pousser('invalider_revue', r.id, { motif: 'satisfait', sujet: String(r.ref) }, `D1 : préalable « ${r.ref} » satisfait ; sa fiche ${r.id} est close`);
   }
 
   // D5 : listes complètes après une issue positive, ou régénération bornée d'un pari existant.
@@ -430,9 +477,23 @@ export function decider(file, etat = {}) {
   const semaine = h.semaine();
   let recettesSemaine = Object.values(recettes).filter((r) => typeof r?.candidate_le === 'string' && creerHorloge(r.candidate_le).semaine() === semaine).length;
 
+  // D2 (courtiers, produit du premier euro) : e-mail B2B aux courtiers en assurance construction d'un département où les
+  // deux listes sont prêtes (cabinets, fiches btp-creations-zone), par l'e-mail direct ouvert (gratuit ; ce ne sont pas
+  // des clients codeur). Un département déjà proposé (revue ouverte, validée, envoyée ou rejetée) ne l'est plus.
+  const emailOuvert = canaux?.email_direct?.statut === 'ouvert' && !canaux.email_direct.payant;
+  const dejaPropose = (ref) => [...ouvertes, ...(Array.isArray(revues) ? revues : [])].some((r) => r.type === 'proposition' && String(r.ref) === ref && (r.statut ?? 'ouverte') !== 'caduque');
+  for (const c of Array.isArray(courtiers) ? courtiers : []) {
+    if (restant <= 0 || !emailOuvert) break;
+    const ref = `courtiers-construction:${c.departement}`;
+    if (!(c.destinataires > 0 && c.fiches > 0) || dejaPropose(ref)) continue;
+    pousser('rediger_brouillon', ref, { recette: 'courtiers-construction', canal: 'email_direct', departement: c.departement },
+      `D2 : e-mail direct ouvert ; ${c.destinataires} cabinet(s) de courtage et ${c.fiches} fiche(s) btp-creations-zone du département ${c.departement}`);
+    restant -= 1;
+  }
+
   for (const it of (file ?? []).filter((x) => x.genre === 'opportunite')) {
     if (restant <= 0) break;
-    const o = it.objet, segment = o.recette_proche ?? o.famille, canal = canalUtilisable(o, canaux, encaisse_eur);
+    const o = it.objet, segment = o.recette_proche ?? o.famille, canal = canalUtilisable(o, canaux, encaisse_eur, { plafond_eur });
     let prise = false;
     if (!canal && !revueOuverte('kit_canal', segment)) {
       pousser('preparer_kit_canal', segment, { segment, canaux: ['comeup', 'malt'].filter((c) => canaux?.[c] && !['exclu', 'ferme'].includes(canaux[c].statut)) },
@@ -440,15 +501,30 @@ export function decider(file, etat = {}) {
       prise = true;
     }
     if (o.recette_proche) {
-      const r = recettes[o.recette_proche] ?? {};
+      const r = recettes[o.recette_proche] ?? {}, e = r.echantillon;
+      // D5 : un échantillon n'est « prêt » que s'il a retenu au moins une fiche et que ses fiches privées sont là ; sinon
+      // un nouvel échantillon (autres pages : la graine change chaque jour), une fois par jour au plus ; après
+      // SEUILS.echantillons_vides échantillons vides, la recette est écartée (« recette sans cible », consignée par le cycle).
+      const pret = e && Number.isFinite(e.retenues) && e.retenues > 0 && e.prive !== false;
+      const ecartee = e && Number.isInteger(e.vides) && e.vides >= SEUILS.echantillons_vides;
       if (!r.sonde) {
         if (peutSirene(1)) { pousser('sonder', o.recette_proche, { recette: o.recette_proche, requete: r.params ?? null }, `D5 : preuve légère, sonde de ${o.recette_proche} (1 requête)`); prise = true; }
-      } else if (!r.echantillon) {
+      } else if (!e) {
         if (peutSirene(2)) { pousser('echantillonner', o.recette_proche, { recette: o.recette_proche, pages: 2, annonce: o.annonce_id }, `D5 : preuve légère, échantillon de 2 pages tirées pour ${o.recette_proche}`); prise = true; }
-      } else if (canal) {
-        pousser('rediger_brouillon', o.annonce_id, { recette: o.recette_proche, canal }, `D2 : canal ${canal} utilisable, échantillon prêt (${o.recette_proche})`);
-        prise = true;
-      }
+      } else if (pret) {
+        if (canal) {
+          pousser('rediger_brouillon', o.annonce_id, { recette: o.recette_proche, canal }, `D2 : canal ${canal} utilisable, échantillon prêt (${o.recette_proche}, ${e.retenues} fiche(s) retenue(s))`);
+          prise = true;
+        }
+      } else if (ecartee) {
+        motifs.push(`D5 : recette ${o.recette_proche} sans cible (${e.vides} échantillons sans fiche retenue) : écartée`);
+      } else if (e.prive === false || (typeof e.jour === 'string' && e.jour < jour)) {
+        if (peutSirene(2)) {
+          pousser('echantillonner', o.recette_proche, { recette: o.recette_proche, pages: 2, annonce: o.annonce_id },
+            `D5 : ${e.prive === false ? 'fiches privées de l’échantillon absentes' : `échantillon du ${e.jour} sans fiche retenue`} ; nouvel échantillon (autres pages)`);
+          prise = true;
+        }
+      } else motifs.push(`D5 : échantillon du jour de ${o.recette_proche} sans fiche retenue ; nouvel essai demain, aucun brouillon`);
     } else if (o.famille === 'donnees' && recettesSemaine < SEUILS.recettes_semaine) {
       pousser('ecrire_recette', o.annonce_id, { annonce: o.annonce_id }, 'D10 : famille données sans recette existante ; une recette candidate par semaine au plus', { type: 'ecrire_recette', statut: 'demande' });
       recettesSemaine += 1; prise = true;
@@ -459,8 +535,8 @@ export function decider(file, etat = {}) {
 
   // D9 : encaissé nul → aucune action de dépense, quelle qu'en soit l'origine.
   const gardees = brutes.filter((a) => {
-    if (!depense(a.type, a.params, canaux, encaisse_eur)) return true;
-    motifs.push(`D9 : ${a.type} écartée, elle engagerait une dépense avec un encaissé nul`);
+    if (!depense(a.type, a.params, canaux, encaisse_eur, plafond_eur)) return true;
+    motifs.push(`D9 : ${a.type} écartée, elle engagerait une dépense ${encaisse_eur > 0 ? 'au-delà de plafond_eur (politique.json)' : 'avec un encaissé nul'}`);
     return false;
   });
   if (!gardees.length) {

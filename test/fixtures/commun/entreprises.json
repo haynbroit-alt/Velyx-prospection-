@@ -43,6 +43,7 @@
       "1486"
     ],
     "opposition": false,
+    "statut_diffusion": "O",
     "etablissements_ouverts": 1,
     "fiche": "https://annuaire-entreprises.data.gouv.fr/entreprise/999000012"
   },
@@ -83,6 +84,7 @@
     "rge": false,
     "idcc": [],
     "opposition": false,
+    "statut_diffusion": "O",
     "etablissements_ouverts": 1,
     "fiche": "https://annuaire-entreprises.data.gouv.fr/entreprise/999000020"
   },
@@ -123,6 +125,7 @@
     "rge": false,
     "idcc": [],
     "opposition": false,
+    "statut_diffusion": "O",
     "etablissements_ouverts": 1,
     "fiche": "https://annuaire-entreprises.data.gouv.fr/entreprise/999000038"
   },
@@ -163,6 +166,7 @@
     "rge": false,
     "idcc": [],
     "opposition": true,
+    "statut_diffusion": "O",
     "etablissements_ouverts": 1,
     "fiche": "https://annuaire-entreprises.data.gouv.fr/entreprise/999000046"
   },
@@ -203,6 +207,7 @@
     "rge": false,
     "idcc": [],
     "opposition": false,
+    "statut_diffusion": "O",
     "etablissements_ouverts": 1,
     "fiche": "https://annuaire-entreprises.data.gouv.fr/entreprise/999000053"
   },
@@ -233,6 +238,7 @@
     "rge": false,
     "idcc": [],
     "opposition": false,
+    "statut_diffusion": "O",
     "etablissements_ouverts": 1,
     "fiche": "https://annuaire-entreprises.data.gouv.fr/entreprise/999000061"
   },
@@ -280,6 +286,7 @@
       "1512"
     ],
     "opposition": false,
+    "statut_diffusion": "O",
     "etablissements_ouverts": 1,
     "fiche": "https://annuaire-entreprises.data.gouv.fr/entreprise/999000079"
   },
@@ -327,6 +334,7 @@
       "1597"
     ],
     "opposition": false,
+    "statut_diffusion": "O",
     "etablissements_ouverts": 1,
     "fiche": "https://annuaire-entreprises.data.gouv.fr/entreprise/999000087"
   },
@@ -367,6 +375,7 @@
     "rge": false,
     "idcc": [],
     "opposition": false,
+    "statut_diffusion": "O",
     "etablissements_ouverts": 0,
     "fiche": "https://annuaire-entreprises.data.gouv.fr/entreprise/999000095"
   },
@@ -409,6 +418,7 @@
       "1597"
     ],
     "opposition": false,
+    "statut_diffusion": "O",
     "etablissements_ouverts": 4,
     "fiche": "https://annuaire-entreprises.data.gouv.fr/entreprise/999000103"
   },
@@ -439,6 +449,7 @@
     "rge": false,
     "idcc": [],
     "opposition": false,
+    "statut_diffusion": "O",
     "etablissements_ouverts": 1,
     "fiche": "https://annuaire-entreprises.data.gouv.fr/entreprise/999000111"
   },
@@ -469,6 +480,7 @@
     "rge": true,
     "idcc": [],
     "opposition": false,
+    "statut_diffusion": "O",
     "etablissements_ouverts": 1,
     "fiche": "https://annuaire-entreprises.data.gouv.fr/entreprise/999000129"
   },
@@ -521,6 +533,7 @@
       "1597"
     ],
     "opposition": false,
+    "statut_diffusion": "O",
     "etablissements_ouverts": 1,
     "fiche": "https://annuaire-entreprises.data.gouv.fr/entreprise/999000137"
   },
@@ -563,6 +576,7 @@
       "1486"
     ],
     "opposition": false,
+    "statut_diffusion": "O",
     "etablissements_ouverts": 1,
     "fiche": "https://annuaire-entreprises.data.gouv.fr/entreprise/999000145"
   },
@@ -605,6 +619,7 @@
       "1486"
     ],
     "opposition": false,
+    "statut_diffusion": "O",
     "etablissements_ouverts": 1,
     "fiche": "https://annuaire-entreprises.data.gouv.fr/entreprise/999000152"
   },
@@ -647,6 +662,7 @@
       "2247"
     ],
     "opposition": false,
+    "statut_diffusion": "O",
     "etablissements_ouverts": 1,
     "fiche": "https://annuaire-entreprises.data.gouv.fr/entreprise/999000160"
   },
@@ -689,6 +705,7 @@
       "2247"
     ],
     "opposition": false,
+    "statut_diffusion": "O",
     "etablissements_ouverts": 1,
     "fiche": "https://annuaire-entreprises.data.gouv.fr/entreprise/999000178"
   },
@@ -729,6 +746,7 @@
     "rge": false,
     "idcc": [],
     "opposition": false,
+    "statut_diffusion": "O",
     "etablissements_ouverts": 1,
     "fiche": "https://annuaire-entreprises.data.gouv.fr/entreprise/999000186"
   },
@@ -769,6 +787,7 @@
     "rge": false,
     "idcc": [],
     "opposition": false,
+    "statut_diffusion": "O",
     "etablissements_ouverts": 1,
     "fiche": "https://annuaire-entreprises.data.gouv.fr/entreprise/999000194"
   },
@@ -811,6 +830,7 @@
       "1597"
     ],
     "opposition": false,
+    "statut_diffusion": "O",
     "etablissements_ouverts": 1,
     "fiche": "https://annuaire-entreprises.data.gouv.fr/entreprise/999000202"
   }

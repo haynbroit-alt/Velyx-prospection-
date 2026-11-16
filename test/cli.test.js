@@ -73,3 +73,95 @@ test('skill velyx-cycle : six pas, aucune commande ni aucun outil d’envoi, de 
   assert.ok(!/mcp__|share|send|gmail|stripe|paypal|checkout|paiement|git push/i.test(s));
   assert.ok(!/velyx\.js (valider|geste|envoye|reponse|encaisse)\b/.test(s), 'aucune commande du propriétaire');
 });
+
+// velyx brouillon : Risk Agent d'abord (R-23 client codeur, R-14), contrôles ensuite ; un contrôle bloquant en échec ne
+// produit ni revue ni pari ; le bloc soumis ne contient ni notes ni repères de prix. Fiches FICTIVES (test/fixtures/commun).
+test('velyx brouillon : contrôle bloquant en échec ou client codeur sans CGU lues → code 1, ni revue ni pari ; sinon texte contrôlé seul', async () => {
+  const { RECETTES, appliquer } = await import('../src/recettes.js');
+  const { creerHorloge } = await import('../src/socle.js');
+  const { extraireTexte } = await import('../src/risque.js');
+  const F = JSON.parse(fs.readFileSync(path.join(DEPOT, 'test', 'fixtures', 'commun', 'entreprises.json'), 'utf8'));
+  const jour = creerHorloge().jour(), h = creerHorloge();
+  const { gardees } = appliquer(RECETTES['rachat-it-idf'], F, { horloge: h, oppositions: new Set() });
+  const ecrireListe = (r, extra) => {
+    fs.mkdirSync(path.join(r, 'prive', 'listes'), { recursive: true });
+    fs.writeFileSync(path.join(r, 'prive', 'listes', `rachat-it-idf-${jour}.json`), JSON.stringify({ recette: 'rachat-it-idf', lu_le: h.iso(), lues: 20, total_registre: 20, complet: true, cibles: gardees, ...extra }));
+  };
+  // (1) Lecture du registre de plus de 7 jours (B4 bloquant) : refus, rien d'écrit.
+  const r1 = racine();
+  ecrireListe(r1, { lu_le: new Date(Date.now() - 10 * 864e5).toISOString() });
+  const avant = arbre(r1), x1 = velyx(r1, 'brouillon', 'rachat-it-idf');
+  assert.equal(x1.status, 1, x1.stdout + x1.stderr);
+  assert.match(x1.stdout, /contrôle bloquant en échec, ni revue ni pari/);
+  assert.match(x1.stdout, /B4/);
+  assert.equal(arbre(r1), avant, 'ni revue, ni pari, ni fiche privée');
+  // (2) Liste liée à une annonce codeur, CGU codeur non lues : R-23, refus avant toute préparation.
+  const r2 = racine();
+  ecrireListe(r2, { annonce: 'https://www.codeur.com/projects/700001-fictive' });
+  const avant2 = arbre(r2), x2 = velyx(r2, 'brouillon', 'rachat-it-idf');
+  assert.equal(x2.status, 1);
+  assert.match(x2.stdout, /Risk Agent : interdit \(R-23\)/);
+  assert.equal(arbre(r2), avant2);
+  // (3) Liste récente, sans client codeur : revue créée ; le bloc couvert par l'empreinte est le texte contrôlé seul.
+  const r3 = racine();
+  ecrireListe(r3, {});
+  const x3 = velyx(r3, 'brouillon', 'rachat-it-idf');
+  assert.equal(x3.status, 0, x3.stdout + x3.stderr);
+  const rid = /revue : (R-[\d-]+)/.exec(x3.stdout)[1], md = fs.readFileSync(path.join(r3, 'prive', 'revues', `${rid}.md`), 'utf8');
+  const texte = extraireTexte(md);
+  assert.ok(!/BLOQUÉ|NOTES POUR LE PROPRIÉTAIRE|€/.test(texte), 'ni en-tête BLOQUÉ, ni notes, ni montant dans le texte soumis');
+  assert.ok(!/aucun contrôle fourni/.test(md), 'les contrôles sont transmis à la fiche');
+  assert.match(md, /\| B1 \| bloquant \| oui \|/);
+  assert.ok(fs.existsSync(path.join(r3, 'prive', 'revues', `${rid}.sirens.json`)), 'index privé de l’échantillon');
+});
+
+test('velyx verifier : registre intact mais nom du canari recopié hors de prive/ → code 1 (antifuite avant tout commit), sans le nom', () => {
+  const r = racine();
+  const F = JSON.parse(fs.readFileSync(path.join(DEPOT, 'test', 'fixtures', 'commun', 'entreprises.json'), 'utf8'));
+  fs.mkdirSync(path.join(r, 'prive', 'listes'), { recursive: true });
+  fs.writeFileSync(path.join(r, 'prive', 'listes', 'fictive-2026-11-16.json'), JSON.stringify({ cibles: F }));
+  assert.equal(velyx(r, 'verifier').status, 0);
+  fs.writeFileSync(path.join(r, 'notes.md'), `À rappeler : ${F[0].dirigeants[0].nom}\n`);
+  const v = velyx(r, 'verifier');
+  assert.equal(v.status, 1, v.stdout);
+  assert.match(v.stdout, /notes\.md:1 dictionnaire/);
+  assert.match(v.stdout, /"registre": true/);
+  assert.ok(!v.stdout.includes(F[0].dirigeants[0].nom.split(' ')[1]), 'la sortie ne recopie pas le nom');
+});
+
+// R-04 : la clé d'un geste vient de la phrase et du jour, pas de l'heure. Le seul compteur d'argent ne compte jamais deux
+// fois la même déclaration ; un encaissement qui cite un pari inexistant est refusé.
+test('velyx encaisse : la même phrase deux fois le même jour → un seul acte ; ref= distingue ; pari inexistant → refus', () => {
+  const r = racine();
+  const lignes = () => new Registre(path.join(r, 'registre', 'journal.jsonl')).lignes;
+  const a = velyx(r, 'encaisse', '50', 'libre');
+  assert.equal(a.status, 0, a.stdout + a.stderr);
+  const n = lignes().length;
+  const b = velyx(r, 'encaisse', '50', 'libre');
+  assert.equal(b.status, 1);
+  assert.match(b.stdout, /déjà consigné ce jour/);
+  assert.equal(lignes().length, n, 'aucun second acte');
+  assert.match(velyx(r, 'etat').stdout, /Argent encaissé : 50 €/);
+  const c = velyx(r, 'encaisse', '50', 'libre', 'ref=F-2026-002');
+  assert.equal(c.status, 0, c.stdout + c.stderr);
+  assert.equal(lignes().at(-1).reference, 'F-2026-002');
+  const d = velyx(r, 'encaisse', '30', 'P-typo-inexistant');
+  assert.equal(d.status, 1);
+  assert.match(d.stdout, /pari inconnu/);
+  assert.match(velyx(r, 'etat').stdout, /Argent encaissé : 100 €/);
+});
+
+// R-43 : velyx marche et velyx cibler passent par le plafond quotidien du cycle (10 GET codeur, 400 SIRENE).
+test('velyx marche : plafond du jour déjà consommé par le cycle → aucune requête, code 1 ; consommation hors cycle décomptée', async () => {
+  const { creerHorloge } = await import('../src/socle.js');
+  const { creerContexte } = await import('../src/cycle.js');
+  const r = racine(), jour = creerHorloge().jour(), reg = new Registre(path.join(r, 'registre', 'journal.jsonl'));
+  reg.ajouter({ type: 'cycle', cle: `cycle:${jour}:1`, jour, passage: 1, statut: 'complet', etapes: [], requetes: { codeur: 10, sirene: 0 }, duree_s: 1 });
+  const m = velyx(r, 'marche', '--pages', '2');
+  assert.equal(m.status, 1, m.stdout + m.stderr);
+  assert.match(m.stdout, /plafond restant du jour : 0 GET codeur/);
+  // Une commande hors cycle qui a consommé est décomptée par le cycle suivant du même jour.
+  reg.ajouter({ type: 'observation', cle: `requetes:cibler:x:${jour}`, source: 'recherche-entreprises.api.gouv.fr (velyx cibler)', mesure: { recette: 'x', lues: 25 }, requetes_hors_cycle: { codeur: 0, sirene: 30 } });
+  const ctx = creerContexte({ racine: r, horloge: creerHorloge(), horsLigne: true, env: {} });
+  assert.deepEqual([ctx.budget.reste('codeur'), ctx.budget.reste('sirene')], [0, 370]);
+});

@@ -379,7 +379,7 @@ export function scannerTexte(texte, dict, { vocab } = {}) {
  * hors CLES_IGNOREES_SCAN ; jeton du dictionnaire ; texte libre de plus de 400 caractères ; objet {departement|commune}
  * avec n < 5. → {ok, motifs: string[]} (noms de motifs seulement, jamais la valeur fautive).
  */
-export function verifierObjetPublic(obj, dict) {
+export function verifierObjetPublic(obj, dict, { clesAdmises = [] } = {}) {
   const ix = indexDe(dict), motifs = new Set(), vocab = ix ? vocabulaire(valeursScannables(obj).join('\n')) : null;
   const scan = (s) => {
     for (const m of motifsStructurels(s)) motifs.add(`motif ${m}`);
@@ -393,7 +393,7 @@ export function verifierObjetPublic(obj, dict) {
         motifs.add(`agrégat géographique de moins de ${N_MIN_GEOGRAPHIQUE}`);
       }
       for (const [k, v] of Object.entries(x)) {
-        if (CLES_INTERDITES_PUBLIC.includes(k)) motifs.add(`clé interdite « ${k} »`);
+        if (CLES_INTERDITES_PUBLIC.includes(k) && !clesAdmises.includes(k)) motifs.add(`clé interdite « ${k} »`);
         if (ignoree(k)) continue;
         scan(k);
         marcher(v, prof + 1);
@@ -406,6 +406,41 @@ export function verifierObjetPublic(obj, dict) {
     } else if (typeof x === 'number') scan(String(x));
   };
   marcher(obj, 0);
+  return { ok: motifs.size === 0, motifs: [...motifs] };
+}
+
+/**
+ * Clés de CLES_INTERDITES_PUBLIC admises dans un acte du registre : « preuve » est un champ exigé de l'encaissement
+ * depuis la v1 (registre.EXIGE). Sa valeur reste scannée comme toute autre (motifs structurels et dictionnaire).
+ */
+export const CLES_ADMISES_REGISTRE = Object.freeze(['preuve']);
+/** Champs de premier niveau d'un acte qui portent du texte libre (phrase du propriétaire, jugement, message d'erreur). */
+export const TEXTES_LIBRES_REGISTRE = Object.freeze(['motif', 'pourquoi', 'choix', 'objet', 'texte', 'raison', 'definition', 'citation']);
+/**
+ * Types d'acte dont le texte libre est écrit par le moteur lui-même (motifs de la table du Risk Agent, raisons des règles
+ * D0 à D10, résultats de contrôle) : sans dictionnaire, ils restent admis, sinon le cycle ne pourrait plus consigner ses
+ * décisions, ses refus ni le compte de ses passages (plafonds du jour). Tout autre acte à texte libre est refusé.
+ */
+export const TYPES_TEXTE_MOTEUR = Object.freeze(['decision', 'refus', 'cycle', 'controle']);
+/** Valeurs littérales posées par le moteur dans un champ de texte libre (choix par défaut d'une validation). */
+const LITTERAUX_REGISTRE = new Set(['valide']);
+
+/**
+ * R-10 pour le registre public (registre/journal.jsonl, en ajout seul : une fuite ne s'en retire plus). Même contrôle que
+ * verifierObjetPublic (clés interdites hors CLES_ADMISES_REGISTRE, motifs structurels, jetons du dictionnaire, texte de
+ * plus de 400 caractères, agrégat géographique de moins de 5), plus : la clé d'idempotence (cle), ignorée par le scan
+ * structurel parce qu'elle porte des empreintes, est scannée par le dictionnaire. dict === null : dictionnaire
+ * indisponible (DictionnaireIncoherent) ; échec fermé, tout texte libre (TEXTES_LIBRES_REGISTRE) d'un acte hors
+ * TYPES_TEXTE_MOTEUR est refusé. → {ok, motifs: string[]} (noms de motifs seulement, jamais la valeur fautive).
+ */
+export function verifierActe(acte, dict) {
+  const motifs = new Set(verifierObjetPublic(acte, dict, { clesAdmises: CLES_ADMISES_REGISTRE }).motifs);
+  const ix = indexDe(dict);
+  if (typeof acte?.cle === 'string' && contientJeton(acte.cle, ix, null)) motifs.add('jeton du dictionnaire (cle)');
+  if (dict === null && acte && typeof acte === 'object' && !TYPES_TEXTE_MOTEUR.includes(acte.type)) {
+    const libres = TEXTES_LIBRES_REGISTRE.filter((k) => typeof acte[k] === 'string' && acte[k].trim() && !LITTERAUX_REGISTRE.has(acte[k].trim()));
+    if (libres.length) motifs.add(`texte libre (${libres.join(', ')}) sans dictionnaire de l’antifuite (indisponible : échec fermé)`);
+  }
   return { ok: motifs.size === 0, motifs: [...motifs] };
 }
 
@@ -446,13 +481,16 @@ function marcherArbre(racine, rel, out) {
   }
 }
 
+// Tout ce qui serait commité : fichiers suivis, plus fichiers non suivis et non ignorés (git ls-files --others
+// --exclude-standard). Un nouveau fichier (fixture, note, workflow) est donc scanné avant même son « git add ».
 function fichiersDuDepot(racine) {
   const out = new Set();
   let suivis = null;
   try {
     if (fs.existsSync(path.join(racine, '.git'))) {
-      suivis = execFileSync('git', ['-C', racine, 'ls-files', '-z'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 64 * 1024 * 1024 })
+      const git = (...a) => execFileSync('git', ['-C', racine, 'ls-files', '-z', ...a], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 64 * 1024 * 1024 })
         .split('\0').filter(Boolean);
+      suivis = [...git(), ...git('--others', '--exclude-standard')];
     }
   } catch { suivis = null; }
   if (suivis) for (const f of suivis) { if (!EXCLUS.test(f)) out.add(f); }
@@ -462,7 +500,8 @@ function fichiersDuDepot(racine) {
 }
 
 /**
- * Scan du dépôt : fichiers suivis par git (tout l'arbre hors .git, node_modules et prive/ si ce n'est pas un dépôt),
+ * Scan du dépôt : fichiers suivis par git et fichiers non suivis non ignorés (tout ce qu'un commit pourrait emporter ;
+ * tout l'arbre hors .git, node_modules et prive/ si ce n'est pas un dépôt),
  * plus etat/**, site/** et registre/** ; prive/ toujours exclu. Un fichier texte trop gros pour être lu compte comme
  * une fuite (motif « non_lu », ligne 0). → {ok, fuites: [{fichier, ligne, motif}],
  * dictionnaire_vide, n_jetons, fichiers}. Un dictionnaire vide est signalé (dictionnaire_vide), jamais compté comme
@@ -509,8 +548,11 @@ export function chargerOppositions(magasin, registre) {
   return ensemble;
 }
 
-/** Exclue de toute liste : opposition au registre (opposition_diffusion_commerciale) ou opposition reçue. */
-export const estExclue = (e, oppositions) => Boolean(e?.opposition) || Boolean(oppositions?.has?.(e?.siren));
+/**
+ * Exclue de toute liste : opposition au registre (opposition_diffusion_commerciale), opposition reçue, ou champ
+ * opposition absent ou illisible (seul false, lu tel quel, permet de retenir une fiche : échec fermé, comme controles G4).
+ */
+export const estExclue = (e, oppositions) => e?.opposition !== false || Boolean(oppositions?.has?.(String(e?.siren)));
 
 /**
  * Enregistre une opposition dans la mémoire privée. → {acte, memoire}. L'acte public ne porte ni le SIREN ni son
@@ -590,23 +632,58 @@ function sansSiren(x, siren) {
 }
 
 /**
+ * Échantillon privé ({fiches, minimise?, compte?}) dont une fiche vient d'être purgée : la copie minimisée (sans SIREN,
+ * donc que sansSiren ne peut pas retirer ligne à ligne) est supprimée en entier, et le compte des retenues diminue
+ * d'autant. Le brouillon recalcule l'échantillon depuis les fiches restantes (cycle.echantillonCourant).
+ */
+function sansCopieMinimisee(avant, apres, horloge) {
+  if (!apres || typeof apres !== 'object' || Array.isArray(apres) || !Array.isArray(avant?.fiches) || !Array.isArray(apres.fiches)) return apres;
+  const n = avant.fiches.length - apres.fiches.length;
+  if (n <= 0) return apres;
+  const { minimise, ...reste } = apres;
+  const c = reste.compte && typeof reste.compte === 'object' && Number.isFinite(reste.compte.retenues)
+    ? { ...reste.compte, retenues: Math.max(0, reste.compte.retenues - n), exclues: (Number(reste.compte.exclues) || 0) + n } : reste.compte;
+  return { ...reste, ...(c !== undefined ? { compte: c } : {}), ...(minimise !== undefined ? { minimise_retire_le: horloge.iso() } : {}) };
+}
+
+// Fichiers de reprise d'une lecture SIRENE : prive/cycles/C-<jour>/cache/reprise-<recette>.json (construire_liste) et
+// prive/cache/cibler-<recette>-<jour>.json (velyx cibler).
+const REPRISE_CYCLE = /^prive\/cycles\/C-(?<jour>\d{4}-\d{2}-\d{2})\/cache\/reprise-(?<recette>[a-z0-9-]+)\.json$/;
+const REPRISE_CIBLER = /^prive\/cache\/cibler-(?<recette>[a-z0-9-]+?)-(?<jour>\d{4}-\d{2}-\d{2})\.json$/;
+
+/**
  * Purges de prive/. motif :
- * - 'fin_cycle' : fiches brutes (*.brut.json) et dossiers cache/ ; memoire.json est gardée ;
+ * - 'fin_cycle' : fiches brutes (*.brut.json) et dossiers cache/, sauf le fichier de reprise du jour d'une recette dont
+ *   la liste n'est pas encore consignée (registre : acte cible du jour) ; memoire.json est gardée ;
  * - 'retention_90j' : listes (prive/listes/** et listes v1 datées) de plus de 90 jours sans pari ouvert qui les cite ;
  * - 'opposition' : le SIREN est retiré des listes, des fiches et des échantillons de la mémoire (il reste dans
- *   memoire.oppositions). Un fichier qu'on ne sait pas réécrire et qui le cite est rendu dans a_revoir.
+ *   memoire.oppositions) ; la copie minimisée d'un échantillon qui contenait la fiche est supprimée (sansCopieMinimisee).
+ *   Un fichier qu'on ne sait pas réécrire et qui le cite est rendu dans a_revoir. Les revues actives qui la montraient
+ *   sont rendues caduques AVANT la purge par l'appelant (risque.invaliderRevuesOpposees).
  * → {supprimes: string[] (fichiers supprimés, ou réécrits pour une opposition), a_revoir: string[]}
  */
 export function purgerPrive(magasin, { horloge = creerHorloge(), motif, registre = null, siren } = {}) {
   const fichiers = magasin.lister('prive/'), supprimes = [], a_revoir = [];
   if (motif === 'fin_cycle') {
-    const caches = new Set();
+    // Une lecture SIRENE interrompue se reprend sans repayer ses pages : le fichier de reprise du jour (construire_liste,
+    // velyx cibler) est gardé tant que la liste de cette recette n'est pas consignée ce jour (acte cible) ; ensuite, ou dès
+    // le lendemain (il n'est jamais relu un autre jour), il part avec son cache.
+    const jour = horloge.jour();
+    const garder = (f) => {
+      const g = (REPRISE_CYCLE.exec(f) ?? REPRISE_CIBLER.exec(f))?.groups;
+      if (!g || g.jour !== jour) return false;
+      return !(registre?.de?.('cible', (l) => l.recette === g.recette && typeof l.date === 'string' && creerHorloge(l.date).jour() === jour) ?? []).length;
+    };
+    const caches = new Map();
     for (const f of fichiers) {
       const i = f.split('/').indexOf('cache');
-      if (i > 0) caches.add(f.split('/').slice(0, i + 1).join('/'));
+      if (i > 0) { const c = f.split('/').slice(0, i + 1).join('/'); if (!caches.has(c)) caches.set(c, []); caches.get(c).push(f); }
       else if (/\.brut\.json$/.test(f)) { magasin.supprimerPrive(f); supprimes.push(f); }
     }
-    for (const c of [...caches].sort()) { magasin.supprimerPrive(c); supprimes.push(`${c}/`); }
+    for (const [c, fs] of [...caches].sort(([a], [b]) => a.localeCompare(b))) {
+      if (!fs.some(garder)) { magasin.supprimerPrive(c); supprimes.push(`${c}/`); continue; }
+      for (const f of fs.filter((x) => !garder(x)).sort()) { magasin.supprimerPrive(f); supprimes.push(f); }
+    }
     return { supprimes, a_revoir };
   }
   if (motif === 'retention_90j') {
@@ -644,7 +721,7 @@ export function purgerPrive(magasin, { horloge = creerHorloge(), motif, registre
         let o;
         try { o = JSON.parse(texte); } catch { a_revoir.push(f); continue; }
         const r = sansSiren(o, siren);
-        if (r.retires) { magasin.ecrirePrive(f, `${JSON.stringify(r.valeur, null, 1)}\n`); supprimes.push(f); } else a_revoir.push(f);
+        if (r.retires) { magasin.ecrirePrive(f, `${JSON.stringify(sansCopieMinimisee(o, r.valeur, horloge), null, 1)}\n`); supprimes.push(f); } else a_revoir.push(f);
       } else if (ext === '.jsonl') {
         const lignes = texte.split('\n').filter((l) => {
           if (!l.trim()) return false;

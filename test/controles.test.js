@@ -71,6 +71,21 @@ test('G11 : diffusion partielle « P » → exclue, non neutralisable', () => {
   assert.throws(() => controlerFiche(n(14), MICRO, { ...ctx, neutraliser: ['G11'] }), /non neutralisable/);
 });
 
+test('G4 et G11 en échec fermé : opposition ou statut de diffusion absent (null, undefined) → exclue', () => {
+  for (const opposition of [null, undefined, 'non']) {
+    const v = controlerFiche({ ...n(14), opposition }, MICRO, ctx);
+    assert.equal(v.statut, 'exclue', String(opposition));
+    assert.ok(v.codes.includes('G4'));
+    assert.match(v.motifs.find((m) => m.code === 'G4').motif, /inconnue/);
+    assert.equal(estExclue({ ...n(14), opposition }, new Set()), true);
+  }
+  for (const statut_diffusion of [null, undefined, '']) {
+    const v = controlerFiche({ ...n(14), statut_diffusion }, MICRO, ctx);
+    assert.equal(v.statut, 'exclue', String(statut_diffusion));
+    assert.ok(v.codes.includes('G11'));
+  }
+});
+
 test('G5 : CA 0 et résultat 22 710 → CA non publié (jamais « 0 € ») ; CA 0 et résultat 0 → activite_nulle_declaree', () => {
   const zero = { ...n(19), finances: [{ annee: 2025, ca: 0, resultat_net: 22710 }], ca: { annee: 2025, ca: 0, resultat_net: 22710 } };
   const v = controlerFiche(zero, MICRO, ctx);

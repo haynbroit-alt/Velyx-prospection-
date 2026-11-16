@@ -13,13 +13,17 @@ import { verifierObjetPublic } from '../src/garde.js';
 import {
   POLITIQUE, REGLES_AILLEURS, ACTIONS_SENSIBLES, DOSSIER_REVUES, JOURNAL_GESTES, chargerPolitique, evaluer, verdictTable, verdictPolitique,
   plusRestrictif, empreintePolitique, verdictApresValidation, mettreEnRevue, fileOuverte, revuesDe, estValidee, expirer, etatRevuePublic,
-  rendreRevue, extraireTexte, appliquerGeste, GRAMMAIRE_GESTES, contexte, cyclesSansGeste,
+  rendreRevue, extraireTexte, appliquerGeste, GRAMMAIRE_GESTES, contexte, cyclesSansGeste, gesteSatisfaisant,
 } from '../src/risque.js';
 
 const RACINE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const POLITIQUE_REELLE = JSON.parse(fs.readFileSync(path.join(RACINE, 'politique.json'), 'utf8'));
-/** Empreinte scellée de la table : toute modification de POLITIQUE (ou de ses conditions) casse ce test et passe par une PR. */
-const EMPREINTE_SCELLEE = '19b532627bd08b0d';
+/**
+ * Empreinte scellée de la table : toute modification de POLITIQUE (ou de ses conditions) casse ce test et passe par une PR.
+ * 16/11/2026 (relecture adverse) : R-14 et R-23 ajoutées pour rediger_brouillon et regenerer_brouillon, R-23 pour
+ * creer_brouillon_gmail (resserrement seulement ; ancienne valeur 19b532627bd08b0d).
+ */
+const EMPREINTE_SCELLEE = 'f0a67ab12c821ab6';
 
 const dossier = () => fs.mkdtempSync(path.join(os.tmpdir(), 'velyx-risque-'));
 const H0 = '2026-11-16T09:00:00Z';
@@ -60,6 +64,7 @@ const CAS = [
   ['publier_site', action('publier_site', { site_ok: true }), ctx(), 'revue_humaine', 'R-25'],
   ['preparer_site hors prive/site', action('preparer_site', { chemin: 'site/index.html' }), ctx(), 'interdit', 'R-25'],
   ['preparer_site', action('preparer_site', { chemin: 'prive/site/index.html' }), ctx(), 'autorise', 'R-25'],
+  ['gmail vers un client codeur, CGU non lues', action('creer_brouillon_gmail', { revue_validee: true, client_codeur: true }), ctx(), 'interdit', 'R-23'],
   ['gmail sans validation', action('creer_brouillon_gmail'), ctx(), 'interdit', 'R-26'],
   ['gmail après validation', action('creer_brouillon_gmail', { revue_validee: true }), ctx(), 'revue_humaine', 'R-26'],
   ['notification trop longue', action('notifier', { texte: 'x'.repeat(301) }), ctx(), 'interdit', 'R-38'],
@@ -82,10 +87,15 @@ const CAS = [
   ['construire_liste segment gagné', action('construire_liste', { segment: 'btp' }), ctx({ segments_gagnes: new Set(['btp']) }), 'autorise', 'R-03'],
   ['construire_liste régénération', action('construire_liste', { pari: 'P-x', estimation_requetes: 45 }), ctx(), 'autorise', 'R-03'],
   ['ecrire_recette', action('ecrire_recette'), ctx(), 'autorise', 'R-42'],
+  ['brouillon, oppositions indisponibles', action('rediger_brouillon'), ctx({ oppositions_dispo: false }), 'interdit', 'R-14'],
+  ['brouillon pour un client codeur, CGU non lues', action('rediger_brouillon', { canal: 'email_direct', client_codeur: true }), ctx(), 'interdit', 'R-23'],
+  ['brouillon pour un client codeur, CGU lues et compatibles', action('rediger_brouillon', { canal: 'email_direct', client_codeur: true }), ctx({ cgu_codeur: 'lue_compatible' }), 'autorise', 'R-09'],
   ['brouillon avec prix', action('rediger_brouillon', { prix: 199 }), ctx(), 'interdit', 'R-22'],
   ['brouillon gelé', action('rediger_brouillon'), ctx({ cycles_sans_geste: 5 }), 'interdit', 'R-21'],
   ['brouillon : deux propositions ouvertes', action('rediger_brouillon'), ctx({ revues_ouvertes_n: 2 }), 'interdit', 'R-21'],
   ['rediger_brouillon', action('rediger_brouillon'), ctx(), 'autorise', 'R-09'],
+  ['régénérer, oppositions indisponibles', action('regenerer_brouillon'), ctx({ oppositions_dispo: false }), 'interdit', 'R-14'],
+  ['régénérer pour un client codeur, CGU interdisant le contact', action('regenerer_brouillon', { client_codeur: true }), ctx({ cgu_codeur: 'lue_interdite' }), 'interdit', 'R-23'],
   ['régénérer avec remise', action('regenerer_brouillon', { remise: 0.1 }), ctx(), 'interdit', 'R-22'],
   ['regenerer_brouillon', action('regenerer_brouillon'), ctx({ revues_ouvertes_n: 2 }), 'autorise', 'R-09'],
   ['preparer_prealable', action('preparer_prealable'), ctx(), 'autorise', 'R-24'],
@@ -201,8 +211,9 @@ test('empreintePolitique() === valeur scellée : toute modification de la table 
 
 const TEXTE_A = 'Bonjour,\n\nVoici un échantillon fictif de dix lignes.\n\n[PRIX À VALIDER PAR LE PROPRIÉTAIRE]\n';
 const TEXTE_B = `${TEXTE_A}Version corrigée.\n`;
+const CONTROLES_VERTS = [{ code: 'B1', gravite: 'bloquant', ok: true, motif: 'chaque nombre a sa provenance' }, { code: 'B7', gravite: 'bloquant', ok: true, motif: 'aucune donnée nominative' }];
 const entree = (extra = {}) => ({ type: 'proposition', ref: 'courtiers-construction:69', texte: TEXTE_A, geste: 'relire, fixer le prix, envoyer depuis sa propre adresse',
-  canal: 'email', annonce: '700001', ...extra });
+  canal: 'email', annonce: '700001', controles: CONTROLES_VERTS, ...extra });
 
 test('mettreEnRevue : id R-AAAA-MM-JJ-k, fiche sous prive/revues/, empreinte du texte, idempotence, version remplacée caduque', () => {
   const { registre, magasin, h } = banc();
@@ -309,6 +320,35 @@ test('appliquerGeste : reponse, envoye, encaisse, rejette, statut, canal ; hors 
   assert.equal(GRAMMAIRE_GESTES.length, 9);
 });
 
+test('appliquerGeste : la clé dépend de la phrase et du jour ; doublon du jour refusé ; statut et canal seulement s’ils changent', () => {
+  const { registre, h } = banc();
+  registre.ajouter(pari('P-x'));
+  const n0 = registre.lignes.length;
+  const a = appliquerGeste('encaisse 50 libre', { registre, horloge: h }).actes[0];
+  h.avancer(60_000);
+  assert.throws(() => appliquerGeste('encaisse  50 libre', { registre, horloge: h }), /déjà consigné ce jour \(acte \d+\)/);
+  assert.equal(registre.lignes.length, n0 + 1);
+  assert.equal(registre.etat().encaisse_eur, 50);
+  assert.equal(appliquerGeste('encaisse 50 libre ref=F-12', { registre, horloge: h }).actes[0].reference, 'F-12');
+  assert.throws(() => appliquerGeste('encaisse 30 P-inexistant', { registre, horloge: h }), /pari inconnu/);
+  appliquerGeste('depense 10 abonnement fictif', { registre, horloge: h });
+  assert.throws(() => appliquerGeste('depense 10 abonnement fictif', { registre, horloge: h }), /déjà consigné/);
+  appliquerGeste('reponse P-x question', { registre, horloge: h });
+  assert.throws(() => appliquerGeste('reponse P-x question', { registre, horloge: h }), /déjà consigné/);
+  // Le lendemain, la même phrase est un nouvel acte, avec une autre clé.
+  h.avancer(24 * 3.6e6);
+  const b = appliquerGeste('encaisse 50 libre', { registre, horloge: h }).actes[0];
+  assert.notEqual(b.cle, a.cle);
+  assert.equal(registre.etat().encaisse_eur, 150);
+  appliquerGeste('statut micro', { registre, horloge: h });
+  assert.throws(() => appliquerGeste('statut micro', { registre, horloge: h }), /déjà « micro »/);
+  appliquerGeste('canal email ouvert', { registre, horloge: h });
+  appliquerGeste('canal email ferme', { registre, horloge: h });
+  appliquerGeste('canal email ouvert', { registre, horloge: h });
+  assert.deepEqual(registre.de('geste', (l) => l.sujet === 'canal').map((l) => l.valeur), ['email:ouvert', 'email:ferme', 'email:ouvert'], 'ouvrir, fermer, rouvrir le même jour : trois actes');
+  assert.equal(contexte(registre, { horloge: h }).etat.canaux.email, 'ouvert');
+});
+
 test('opposition : le SIREN est rendu à M4, aucun SIREN dans l’acte public ni au registre', () => {
   const { registre, magasin, h } = banc();
   const siren = '999000012';                                   // SIREN fictif (clé de Luhn fausse)
@@ -392,6 +432,22 @@ test('contexte : lu dans le registre réel (encaissé nul, aucun cycle) ; cycles
   const { registre, h } = banc();
   registre.ajouter({ type: 'mandat', ...PROPRIO, texte: 't', source: 's', regle: 'r' });
   for (let i = 1; i <= 3; i++) registre.ajouter({ type: 'cycle', jour: '2026-11-16', passage: i, etapes: [], requetes: { codeur: 0, sirene: 0 }, duree_s: 1, cle: `cycle:${i}` });
-  assert.equal(cyclesSansGeste(registre).n, 3);
+  // Un cycle est un jour de Paris : trois passages du même jour font un cycle, pas trois (D8 au 5e jour, pas au 2e).
+  assert.deepEqual([cyclesSansGeste(registre).n, cyclesSansGeste(registre).passages], [1, 3]);
+  for (const [jour, p] of [['2026-11-17', 1], ['2026-11-17', 2], ['2026-11-18', 1]]) registre.ajouter({ type: 'cycle', jour, passage: p, etapes: [], requetes: { codeur: 0, sirene: 0 }, duree_s: 1, cle: `cycle:${jour}:${p}` });
+  assert.equal(cyclesSansGeste(registre).n, 3, '16, 17 et 18/11 : trois jours, six passages');
   assert.equal(contexte(registre, { horloge: h }).etat.cycles_sans_geste, 3);
+});
+
+test('revuesDe : un préalable clos « satisfait » est résolu à la date du geste qui l’a satisfait (latence du propriétaire)', () => {
+  const { registre, magasin, h } = banc();
+  const rv = mettreEnRevue(entree({ type: 'prealable', ref: 'statut', texte: 'Fiche statut fictive.' }), { registre, horloge: h, magasin }).revue;
+  h.avancer(5 * 3.6e6);
+  const g = appliquerGeste('statut micro', { registre, horloge: h }).actes[0];
+  h.avancer(10 * 3.6e6);
+  assert.equal(gesteSatisfaisant(registre, revuesDe(registre, h).find((r) => r.id === rv.id)).n, g.n);
+  registre.ajouter({ type: 'decision', action: 'invalider_revue', verdict: 'autorise', regle: 'R-28', revue: rv.id, motif: 'satisfait', geste_ligne: g.n, cle: `caduque:${rv.id}` });
+  const r = revuesDe(registre, h).find((x) => x.id === rv.id);
+  assert.deepEqual([r.statut, r.motif_caduque, r.decision_le], ['caduque', 'satisfait', g.date]);
+  assert.equal(fileOuverte(registre, h).length, 0, 'la notification ne redemande plus le geste');
 });

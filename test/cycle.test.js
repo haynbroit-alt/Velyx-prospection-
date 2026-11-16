@@ -10,7 +10,7 @@ import { creerHorloge, empreinteArbre } from '../src/socle.js';
 import { Registre, CLES } from '../src/registre.js';
 import { ETAPES } from '../src/contrats.js';
 import { scannerTexte } from '../src/garde.js';
-import { creerContexte, executerCycle, simuler, executer, juger, migrer, fermerCycleOrphelin, nettoyer, SCHEMAS_JUGEMENT, EXECUTANTS } from '../src/cycle.js';
+import { creerContexte, executerCycle, simuler, executer, juger, migrer, fermerCycleOrphelin, nettoyer, SCHEMAS_JUGEMENT, EXECUTANTS, retour } from '../src/cycle.js';
 import { TYPES_ACTION } from '../src/contrats.js';
 
 const DEPOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -92,17 +92,30 @@ test('cycle complet hors ligne sur fixtures, puis relancé → 0 ligne ajoutée,
   assert.equal(arbre(r), empreinte, 'rien n’est réécrit');
 });
 
-test('conteneur neuf le même jour (prive/cycles effacé) → observation réhydratée, 0 requête codeur, aucune ligne dupliquée', async () => {
+test('conteneur neuf le même jour (prive/cycles effacé) → mêmes faits, mêmes décisions, nouveau passage consigné, etat/cycles fusionné', async () => {
   const r = racine(), net = reseau();
   await executerCycle(contexte(r, net));
+  const point = (k, nom) => JSON.parse(fs.readFileSync(path.join(r, 'prive', 'cycles', 'C-2026-11-16', `${String(k).padStart(2, '0')}-${nom}.json`), 'utf8')).sortie;
+  const resume = (x) => ({ faits: x.faits.filter((f) => !f.sujet.startsWith('page:')).map((f) => `${f.id}=${JSON.stringify(f.valeur)}/${f.n}`).sort() });
+  const faits1 = resume(point(2, 'comprendre')), decisions1 = point(7, 'decider').actions.map((a) => `${a.type}:${a.cle}:${a.verdict.verdict}`);
+  const public1 = JSON.parse(fs.readFileSync(path.join(r, 'etat', 'cycles', 'C-2026-11-16.json'), 'utf8')).passages;
   fs.rmSync(path.join(r, 'prive', 'cycles'), { recursive: true });
-  const avant = net.n('www.codeur.com');
+  const avant = net.n('www.codeur.com'), n0 = lignes(r).length;
   const rap = await executerCycle(contexte(r, net));
   assert.equal(rap.etapes[0].statut, 'reutilise');
   assert.equal(net.n('www.codeur.com'), avant, '0 requête codeur');
   const cles = lignes(r).map((l) => l.cle).filter(Boolean);
   assert.equal(cles.length, new Set(cles).size, 'aucune clé en double');
   assert.equal(lignes(r).filter((l) => l.type === 'observation').length, 1);
+  assert.deepEqual(resume(point(2, 'comprendre')), faits1, 'mêmes faits (âges et familles relus dans la série)');
+  assert.deepEqual(point(7, 'decider').actions.map((a) => `${a.type}:${a.cle}:${a.verdict.verdict}`), decisions1, 'mêmes décisions, relues au registre');
+  assert.equal(rap.passage, 2, 'un nouveau passage, jamais le numéro d’un passage consigné');
+  assert.ok(lignes(r).slice(n0).some((l) => l.cle === CLES.cycle('2026-11-16', 2)), 'acte cycle du passage consigné (sa consommation compte)');
+  const public2 = JSON.parse(fs.readFileSync(path.join(r, 'etat', 'cycles', 'C-2026-11-16.json'), 'utf8')).passages;
+  assert.deepEqual(public2.map((p) => p.passage), [1, 2]);
+  assert.deepEqual(public2[0], public1[0], 'le passage 1 public n’est pas réécrit');
+  const etat = JSON.parse(fs.readFileSync(path.join(r, 'prive', 'cycles', 'C-2026-11-16', 'cycle.json'), 'utf8'));
+  assert.notEqual(Object.values(etat.actions).find((a) => a.type === 'lire_cgu')?.statut, 'executee', 'page non relue : l’action n’est pas « executee »');
 });
 
 test('executer avec un verdict revue_humaine → lève, aucune écriture ; simulation non réussie → lève aussi', async () => {
@@ -223,9 +236,250 @@ test('mode veille : oppositions déclarées mais mémoire absente → aucune con
   assert.ok(!fs.existsSync(path.join(r, 'prive', 'listes', 'echantillon-btp-creations-zone-2026-11-16.json')));
 });
 
-test('à blanc : un cycle complet n’écrit rien sur le disque (magasin en calque, registre en copie)', async () => {
-  const r = racine(), empreinte = arbre(r);
-  const rap = await executerCycle(contexte(r, reseau(), { aBlanc: true }));
-  assert.ok(rap.etapes.every((e) => e.statut !== 'echec'), JSON.stringify(rap.etapes));
+// À blanc : rien n'est écrit, donc rien ne doit être consommé du plafond du jour (R-43) : le réseau est limité au cache.
+test('à blanc : un cycle complet n’écrit rien sur le disque et n’émet aucune requête (plafond du jour intact)', async () => {
+  const r = racine(), net = reseau(), empreinte = arbre(r);
+  for (let i = 0; i < 3; i++) {
+    const ctx = contexte(r, net, { aBlanc: true });
+    assert.equal(ctx.budget.reste('codeur'), 10);
+    const rap = await executerCycle(ctx);
+    assert.deepEqual(rap.requetes, { codeur: 0, sirene: 0 });
+  }
+  assert.equal(net.appels.length, 0, 'trois passes à blanc : aucune requête réelle');
   assert.equal(arbre(r), empreinte);
+  // Après un passage réel du jour, la passe à blanc rejoue l'analyse (observation réhydratée) sans requête ni écriture.
+  await executerCycle(contexte(r, net));
+  fs.rmSync(path.join(r, 'prive', 'cycles'), { recursive: true });
+  const n = net.appels.length, apres = arbre(r);
+  const rap = await executerCycle(contexte(r, net, { aBlanc: true }));
+  assert.ok(rap.etapes.every((e) => e.statut !== 'echec'), JSON.stringify(rap.etapes));
+  assert.equal(net.appels.length, n);
+  assert.equal(arbre(r), apres);
+});
+
+// R-12, R-13 : une opposition reçue après l'échantillonnage ne survit ni dans l'échantillon montré au tiers, ni dans une
+// revue active. Fiches FICTIVES (test/fixtures/commun) ; la CLI est lancée dans un sous-processus sur la racine temporaire.
+test('opposition reçue après l’échantillon → revue caduque, copie minimisée purgée, brouillon recalculé sans l’entreprise', async () => {
+  const { spawnSync } = await import('node:child_process');
+  const { appliquer } = await import('../src/recettes.js');
+  const { echantillonMinimise, ligneEchantillon } = await import('../src/brouillons.js');
+  const risque = await import('../src/risque.js');
+  const { echantillonCourant } = await import('../src/cycle.js');
+  const r = racine({ listes: false }), h = creerHorloge('2026-11-16T06:41:00Z');
+  const F = JSON.parse(fx('commun/entreprises.json'));
+  const g = appliquer({ garder: () => true, signaux: () => [] }, F, { horloge: h, oppositions: new Set(), lecture: { complet: false } });
+  // Ancien format : la copie minimisée (sans SIREN) est encore écrite à côté des fiches.
+  const minimise = echantillonMinimise(g.gardees, { horloge: h });
+  const rel = 'prive/listes/echantillon-btp-creations-zone-2026-11-16.json', abs = path.join(r, rel);
+  fs.mkdirSync(path.dirname(abs), { recursive: true });
+  fs.writeFileSync(abs, JSON.stringify({ recette: 'btp-creations-zone', graine: 'g', pages: [1], lu_le: h.iso(), total: 40, compte: { ...g.compte, par_signal: { rge: 0 } }, minimise, fiches: g.gardees }));
+  const cible = g.gardees[0].siren, sansAlias = (l) => l.replace(/^S\d{2} · /, '');
+  const ligne = sansAlias(ligneEchantillon(minimise[0]));
+  const ctx = creerContexte({ racine: r, horloge: h, horsLigne: true, env: {} });
+  const a = { type: 'rediger_brouillon', ref: '492531', params: { recette: 'btp-creations-zone', canal: 'email' } };
+  const d = (await EXECUTANTS.rediger_brouillon(a, ctx)).revues[0];
+  assert.ok(d.texte.includes(ligne), 'avant l’opposition, la fiche est dans l’échantillon');
+  assert.ok(d.sirens.includes(cible));
+  const { revue } = risque.mettreEnRevue(d, { registre: ctx.registre, horloge: h, magasin: ctx.magasin });
+  assert.ok(fs.existsSync(path.join(r, risque.indexRevue(revue.id))), 'index privé de la revue écrit');
+  // Le propriétaire enregistre l'opposition (chemin réel de la CLI).
+  const x = spawnSync(process.execPath, [path.join(DEPOT, 'bin', 'velyx.js'), 'geste', `opposition ${cible}`], { encoding: 'utf8', env: { ...process.env, VELYX_RACINE: r } });
+  assert.equal(x.status, 0, x.stdout + x.stderr);
+  assert.match(x.stdout, new RegExp(`revues rendues caduques : ${revue.id}`));
+  const reg = new Registre(path.join(r, 'registre', 'journal.jsonl'));
+  assert.equal(risque.revuesDe(reg, h).find((v) => v.id === revue.id).statut, 'caduque');
+  assert.ok(!fs.readFileSync(path.join(r, 'registre', 'journal.jsonl'), 'utf8').includes(cible), 'le SIREN ne va jamais au registre');
+  const apres = JSON.parse(fs.readFileSync(abs, 'utf8'));
+  assert.equal(apres.fiches.filter((e) => e.siren === cible).length, 0);
+  assert.equal(apres.minimise, undefined, 'la copie minimisée qui montrait l’entreprise est supprimée');
+  assert.equal(apres.compte.retenues, g.compte.retenues - 1);
+  assert.ok(!JSON.parse(fs.readFileSync(path.join(r, risque.indexRevue(revue.id)), 'utf8')).sirens.includes(cible));
+  // Le brouillon suivant recalcule l'échantillon depuis les fiches restantes : la ligne de l'entreprise opposée n'y est plus.
+  const d2 = (await EXECUTANTS.rediger_brouillon(a, creerContexte({ racine: r, horloge: h, horsLigne: true, env: {} }))).revues[0];
+  assert.ok(!d2.texte.includes(ligne));
+  assert.ok(!d2.sirens.includes(cible));
+  // Opposition connue mais pas encore purgée (mémoire seule) : l'échantillon courant l'écarte aussi, et le compte suit.
+  const c = echantillonCourant({ fiches: g.gardees, compte: { retenues: g.gardees.length, exclues: 0 } }, { oppositions: new Set([cible]), horloge: h });
+  assert.ok(!c.sirens.includes(cible));
+  assert.equal(c.compte.retenues, g.gardees.length - 1);
+  assert.throws(() => echantillonCourant({ minimise }, { horloge: h }), /sans fiches contrôlées/);
+});
+
+test('fiches de revue : le texte soumis (couvert par l’empreinte) est celui des contrôles ; notes et repères de prix hors du bloc', async () => {
+  const risque = await import('../src/risque.js');
+  const r = racine({ listes: false }), h = creerHorloge('2026-11-16T06:41:00Z');
+  const ctx = creerContexte({ racine: r, horloge: h, horsLigne: true, env: {} });
+  const kit = (await EXECUTANTS.preparer_kit_canal({ type: 'preparer_kit_canal', ref: 'donnees', params: { segment: 'donnees', canaux: ['comeup', 'malt'] } }, ctx)).revues[0];
+  const pre = (await EXECUTANTS.preparer_prealable({ type: 'preparer_prealable', ref: 'statut', params: { sujet: 'statut' } }, ctx)).revues[0];
+  for (const d of [kit, pre]) {
+    assert.ok(!/€/.test(d.texte), `${d.type} : aucun montant dans le texte soumis`);
+    assert.ok(!/NOTES POUR LE PROPRIÉTAIRE|Repères de prix/i.test(d.texte), `${d.type} : aucune note dans le texte soumis`);
+    const { revue } = risque.mettreEnRevue(d, { registre: ctx.registre, horloge: h, magasin: ctx.magasin });
+    const md = ctx.magasin.lire(revue.fichier_prive), soumis = risque.extraireTexte(md);
+    assert.equal(soumis, d.texte, 'le bloc couvert par l’empreinte est exactement le texte contrôlé');
+    if (d.notes) assert.ok(md.indexOf(d.notes.trim()) > md.indexOf('<!-- velyx:texte:fin -->'), 'les notes suivent le bloc');
+  }
+  assert.match(kit.notes, /€/, 'les repères de prix restent dans la fiche privée, pour le propriétaire');
+});
+
+// Recette par nom (courtiers-construction : une recherche par mot) : l'échantillon est tiré dans la population que la
+// sonde a comptée (chaque page dans SA recherche, numéro calculé sur SON total), jamais dans les 66.22Z de France sans « q ».
+test('echantillonner courtiers-construction : pages tirées dans les recherches comptées par la sonde ; compte.total = total de la sonde', async () => {
+  const r = racine({ listes: false }), appels = [];
+  const totaux = { btp: 15, construction: 26, batiment: 4479, decennale: 6 };
+  const fetchImpl = async (u) => {
+    appels.push(new URL(u));
+    const url = new URL(u), q = url.searchParams.get('q'), t = totaux[q] ?? 99_999;
+    const corps = url.searchParams.get('per_page') === '1' ? { results: [], total_results: t, total_pages: t }
+      : { results: JSON.parse(fx('sirene/fiches-brutes.json')), total_results: t, total_pages: Math.ceil(t / 25) };
+    return new Response(JSON.stringify(corps), { headers: { 'content-type': 'application/json' } });
+  };
+  const h = creerHorloge('2026-11-17T08:00:00Z');
+  const ctx = creerContexte({ racine: r, horloge: h, fetchImpl, attendre: async (ms) => h.avancer(ms), env: {} });
+  ctx.passage = 1; ctx.etatCycle = { passages: [], actions: {} }; ctx.S = {};
+  const a = { type: 'sonder', ref: 'courtiers-construction', params: { recette: 'courtiers-construction' } };
+  await EXECUTANTS.sonder(a, ctx);
+  const sonde = ctx.registre.derniere('fait', (l) => l.sujet === 'sonde:courtiers-construction');
+  assert.equal(sonde.valeur, 15 + 26 + 4479 + 6);
+  assert.deepEqual(sonde.sous_totaux.map((x) => x.q), ['btp', 'construction', 'batiment', 'decennale']);
+  const n0 = appels.length;
+  const e = { type: 'echantillonner', ref: 'courtiers-construction', params: { recette: 'courtiers-construction', pages: 2 } };
+  await EXECUTANTS.echantillonner(e, ctx);
+  const lues = appels.slice(n0);
+  assert.equal(lues.length, 2, 'sous_totaux de la sonde : aucun compte de plus, 2 pages');
+  for (const u of lues) {
+    const q = u.searchParams.get('q');
+    assert.ok(Object.hasOwn(totaux, q), `page tirée hors des recherches comptées : ${u.search}`);
+    assert.ok(Number(u.searchParams.get('page')) <= Math.ceil(totaux[q] / 25), `page ${u.searchParams.get('page')} au-delà du total de « ${q} »`);
+  }
+  const f = JSON.parse(fs.readFileSync(path.join(r, 'prive', 'listes', 'echantillon-courtiers-construction-2026-11-17.json'), 'utf8'));
+  assert.equal(f.compte.total, sonde.valeur, 'le total de l’échantillon est celui de la population tirée');
+  assert.equal(f.tirage.length, 2);
+});
+
+// R-11 et budget : une lecture SIRENE interrompue (construire_liste) se reprend au passage suivant sans repayer ses pages :
+// RETOUR ne purge pas la reprise du jour tant que la liste n'est pas consignée.
+test('construire_liste interrompue → reprise gardée après RETOUR ; le passage suivant ne relit pas les pages payées', async () => {
+  const r = racine({ listes: false }), fiches = fx('sirene/fiches-brutes.json');
+  let pages = 0, panne = true;
+  const fetchImpl = async (u) => {
+    const url = new URL(u), corps = url.searchParams.get('per_page') === '1' ? { results: [], total_results: 120, total_pages: 120 } : null;
+    if (corps) return new Response(JSON.stringify(corps), { headers: { 'content-type': 'application/json' } });
+    pages++;
+    if (panne && pages >= 3) throw new TypeError('fetch failed');
+    return new Response(JSON.stringify({ results: JSON.parse(fiches), total_results: 120, total_pages: 5 }), { headers: { 'content-type': 'application/json' } });
+  };
+  const ctxDe = () => {
+    const h = creerHorloge('2026-11-17T08:00:00Z'), c = creerContexte({ racine: r, horloge: h, fetchImpl, attendre: async (ms) => h.avancer(ms), env: {} });
+    c.passage = 1; c.etatCycle = { passages: [], actions: {} }; c.S = {};
+    return c;
+  };
+  const a = { id: 'A-x', type: 'construire_liste', ref: 'btp-creations-zone', params: { recette: 'btp-creations-zone' }, cle: 'k' };
+  const c1 = ctxDe();
+  await assert.rejects(() => EXECUTANTS.construire_liste(a, c1), /échec réseau/);
+  const rel = path.join(r, 'prive/cycles/C-2026-11-17/cache/reprise-btp-creations-zone.json');
+  assert.equal(Object.keys(JSON.parse(fs.readFileSync(rel, 'utf8'))).length, 2);
+  retour({ a_juger: [] }, c1);
+  assert.ok(fs.existsSync(rel), 'reprise gardée après RETOUR');
+  panne = false; pages = 0;
+  const c2 = ctxDe();
+  await EXECUTANTS.construire_liste(a, c2);
+  assert.equal(pages, 3, 'pages 3 à 5 seulement : les 2 pages payées viennent de la reprise');
+  retour({ a_juger: [] }, c2);
+  assert.ok(!fs.existsSync(rel), 'liste consignée : reprise purgée');
+});
+
+test('budget épuisé pendant EXÉCUTER (SIRENE en 429, plafond 1) → action en échec, les revues déjà produites sont mises en file', async () => {
+  const r = racine(), base = reseau();
+  const fetchImpl = async (u) => (new URL(u).hostname === 'recherche-entreprises.api.gouv.fr' ? new Response('trop', { status: 429 }) : base.fetchImpl(u));
+  const rap = await executerCycle(contexte(r, { fetchImpl }, { plafonds: { codeur: 10, sirene: 1, duree_s: 600, jugements: 5, nouvelles_opportunites: 1, passages_jour: 3 } }));
+  const etat = JSON.parse(fs.readFileSync(path.join(r, 'prive', 'cycles', 'C-2026-11-16', 'cycle.json'), 'utf8'));
+  const actions = Object.values(etat.actions);
+  assert.equal(actions.find((a) => a.type === 'sonder')?.statut, 'echec', JSON.stringify(actions));
+  assert.equal(rap.statut, 'budget');
+  assert.equal(rap.etapes.find((e) => e.nom === 'revue').statut, 'fait', 'REVUE n’est pas sautée');
+  const produites = actions.filter((a) => a.statut === 'executee' && ['preparer_prealable', 'preparer_kit_canal'].includes(a.type)).length;
+  assert.ok(produites >= 1, JSON.stringify(actions));
+  assert.equal(lignes(r).filter((l) => l.type === 'revue').length, produites, 'chaque action exécutée qui produit une fiche a sa revue');
+});
+
+// E-mail B2B aux courtiers en assurance construction (gabarit courtiers-construction) : destinataires tirés de la liste
+// courtiers-construction, échantillon et comptes de btp-creations-zone du MÊME département. Fiches FICTIVES.
+function listesCourtiers(r, h) {
+  const communes = ['ANNECY', 'THONON-LES-BAINS', 'CLUSES', 'SALLANCHES', 'ANNEMASSE', 'RUMILLY', 'EVIAN-LES-BAINS', 'SEYNOD', 'PASSY', 'BONNEVILLE', 'FAVERGES', 'MEGEVE'];
+  const noms = ['VERGLASSE', 'TOITURIN', 'MOELLONET', 'CHAUXELLE', 'FICTIFOR', 'ENDUIRAC', 'CHARPENTOT', 'CARRELINE', 'PLATRIER', 'ZINGUELLE', 'BETONNIC', 'ISOLETTE'];
+  const btp = communes.map((commune, i) => ({ siren: `9990009${String(i + 10)}`, nom: `ENTREPRISE FICTIVE ${String.fromCharCode(65 + i)} BATIMENT`, nature_juridique: '5710',
+    naf: ['43.22A', '43.99C', '43.29A', '41.20A', '43.21A', '43.32A'][i % 6], creation: `2026-0${(i % 9) + 1}-1${i % 9}`, etat_administratif: 'A', fermee: false, categorie: 'PME',
+    effectif: '1-2', effectif_code: '01', effectif_annee: 2026, departement: '74', commune, dirigeants: [{ qualite: 'Président', nom: `Prénom ${noms[i]}`, annee_naissance: 1980 + i }],
+    dirigeants_pm: 0, finances: [], ca: null, rge: i % 2 === 0, idcc: [], opposition: i === 2, statut_diffusion: 'O', etablissements_ouverts: 1, fiche: `https://annuaire-entreprises.data.gouv.fr/entreprise/9990009${String(i + 10)}` }));
+  const courtiers = [['COURTAGE FICTIF BTP', '74', false], ['CABINET FICTIF CONSTRUCTION', '74', false], ['ASSURANCES FICTIVES DECENNALE', '69', false], ['COURTIER FICTIF BATIMENT OPPOSE', '74', true]]
+    .map(([nom, departement, opposition], i) => ({ siren: `99900080${i}`, nom, nature_juridique: '5499', naf: '66.22Z', departement, commune: departement === '74' ? 'ANNECY' : 'LYON', opposition, statut_diffusion: 'O',
+      etat_administratif: 'A', fermee: false, dirigeants: [{ qualite: 'Gérant', nom: `Prénom COURTIERIX${i}`, annee_naissance: 1975 }], fiche: `https://annuaire-entreprises.data.gouv.fr/entreprise/99900080${i}` }));
+  return { btp, courtiers };
+}
+async function ecrireListesCourtiers(r, h) {
+  const { appliquer, compiler } = await import('../src/recettes.js');
+  const spec = (id) => JSON.parse(fs.readFileSync(path.join(DEPOT, 'etat', 'recettes', `${id}.json`), 'utf8'));
+  const { btp, courtiers } = listesCourtiers(r, h), jour = h.jour();
+  const rb = compiler(spec('btp-creations-zone'), h, { departement: '74' }), gb = appliquer(rb, btp, { horloge: h, oppositions: new Set(), lecture: { complet: false } });
+  const rc = compiler(spec('courtiers-construction'), h), gc = appliquer(rc, courtiers, { horloge: h, oppositions: new Set(), lecture: { complet: true } });
+  fs.mkdirSync(path.join(r, 'prive', 'listes'), { recursive: true });
+  fs.writeFileSync(path.join(r, 'prive', 'listes', `btp-creations-zone-${jour}.json`), JSON.stringify({ recette: 'btp-creations-zone', lu_le: h.iso(), complet: false, variables: rb.variables, cibles: gb.gardees }));
+  fs.writeFileSync(path.join(r, 'prive', 'listes', `courtiers-construction-${jour}.json`), JSON.stringify({ recette: 'courtiers-construction', lu_le: h.iso(), complet: true, cibles: gc.gardees }));
+  return { btp: gb.gardees, courtiers: gc.gardees };
+}
+
+test('courtiers-construction : brouillon de bout en bout (exécutant, cycle, CLI) → revue proposition et pari ; destinataires et échantillon du même département', async () => {
+  const { spawnSync } = await import('node:child_process');
+  const risque = await import('../src/risque.js');
+  const h = creerHorloge('2026-11-16T06:41:00Z');
+  // (1) L'exécutant : texte du gabarit rempli depuis btp-creations-zone du 74, destinataires du 74 seulement, opposés exclus.
+  const r = racine({ listes: false }), L = await ecrireListesCourtiers(r, h);
+  assert.deepEqual(L.courtiers.map((c) => c.departement).sort(), ['69', '74', '74'], 'le cabinet opposé est exclu de la liste');
+  const ctx = creerContexte({ racine: r, horloge: h, horsLigne: true, env: {} });
+  const sortie = await EXECUTANTS.rediger_brouillon({ type: 'rediger_brouillon', ref: 'courtiers-construction:74', params: { recette: 'courtiers-construction', canal: 'email_direct', departement: '74' } }, ctx);
+  const d = sortie.revues[0];
+  assert.ok(d.controles.every((c) => c.gravite !== 'bloquant' || c.ok), JSON.stringify(d.controles.filter((c) => !c.ok)));
+  assert.match(d.texte.split('\n')[0], /^Objet : .*bâtiment.*décennale/);
+  for (const attendu of ['département 74', 'au moins ', '[NOM DU PROPRIÉTAIRE]', 'art. 14 du RGPD', '« STOP »']) assert.ok(d.texte.includes(attendu), attendu);
+  assert.equal(d.texte.split('\n').filter((l) => /^- S\d{2} · /.test(l)).length, 10, 'échantillon minimisé de 10 lignes');
+  assert.ok(!/Prénom|VERGLASSE|TOITURIN|COURTIERIX/.test(d.texte), 'aucun nom de dirigeant');
+  assert.ok(d.notes.includes('COURTAGE FICTIF BTP') && d.notes.includes('CABINET FICTIF CONSTRUCTION'), 'destinataires du 74 dans la fiche privée');
+  assert.ok(!d.notes.includes('ASSURANCES FICTIVES DECENNALE') && !d.notes.includes('OPPOSE'), 'ni un cabinet d’un autre département, ni un opposé');
+  assert.ok(d.sirens.includes('999000800') && d.sirens.includes(L.btp[0].siren), 'index privé : échantillon et destinataires');
+  assert.ok(!d.texte.includes('COURTAGE FICTIF BTP'), 'le texte soumis ne nomme pas le destinataire');
+  await assert.rejects(() => EXECUTANTS.rediger_brouillon({ type: 'rediger_brouillon', ref: 'x', params: { recette: 'courtiers-construction', departement: '13' } }, ctx), /aucun cabinet de courtage du département 13/);
+  // (2) Le cycle : statut déclaré et e-mail ouvert → DÉCIDER prépare l'e-mail, REVUE le met en file avec son pari.
+  const PREUVE = { auteur: 'proprietaire', verification: 'session', preuve_empreinte: 'a'.repeat(64) };
+  const r2 = racine({ listes: false, actes: [{ type: 'geste', ...PREUVE, sujet: 'statut', valeur: 'micro', cle: 'g1' }, { type: 'geste', ...PREUVE, sujet: 'canal', valeur: 'email:ouvert', cle: 'g2' }] });
+  await ecrireListesCourtiers(r2, h);
+  await executerCycle(contexte(r2, reseau()));
+  const L2 = lignes(r2);
+  const dec = L2.find((l) => l.type === 'decision' && l.action === 'rediger_brouillon' && l.ref === 'courtiers-construction:74');
+  assert.ok(dec && dec.verdict === 'autorise', JSON.stringify(L2.filter((l) => l.type === 'decision').map((l) => `${l.action} ${l.ref} ${l.verdict}`)));
+  const rv = L2.find((l) => l.type === 'revue' && l.ref === 'courtiers-construction:74');
+  assert.ok(rv && rv.type_revue === 'proposition');
+  assert.ok(L2.some((l) => l.type === 'pari' && l.revue === rv.id && l.recette === 'courtiers-construction'), 'le pari naît avec la revue');
+  assert.ok(!fs.readFileSync(path.join(r2, 'registre', 'journal.jsonl'), 'utf8').includes('COURTAGE FICTIF'), 'aucun nom de cabinet au registre');
+  // Le lendemain, le département déjà proposé ne l'est plus.
+  await executerCycle(contexte(r2, reseau(), { iso: '2026-11-17T06:41:00Z' }));
+  assert.equal(lignes(r2).filter((l) => l.type === 'decision' && l.action === 'rediger_brouillon' && l.ref === 'courtiers-construction:74').length, 1);
+  // (3) La CLI : velyx brouillon courtiers-construction → revue et pari (avant la correction : code 1, « se prépare par preparer »).
+  const r3 = racine({ listes: false });
+  const hr = creerHorloge();
+  await ecrireListesCourtiers(r3, hr);
+  const x = spawnSync(process.execPath, [path.join(DEPOT, 'bin', 'velyx.js'), 'brouillon', 'courtiers-construction', '--departement', '74'], { encoding: 'utf8', env: { ...process.env, VELYX_RACINE: r3 } });
+  assert.equal(x.status, 0, x.stdout + x.stderr);
+  const rid = /revue : (R-[\d-]+)/.exec(x.stdout)[1];
+  const md = fs.readFileSync(path.join(r3, 'prive', 'revues', `${rid}.md`), 'utf8');
+  assert.match(risque.extraireTexte(md), /^Objet : /);
+  assert.ok(lignes(r3).some((l) => l.type === 'pari' && l.revue === rid));
+});
+
+test('plan d’observation : aucune sonde sans « q » pour une recette à plusieurs recherches (courtiers-construction)', async () => {
+  const { etatRecettes } = await import('../src/cycle.js');
+  const r = racine({ listes: false });
+  const e = etatRecettes(creerContexte({ racine: r, horloge: creerHorloge('2026-11-16T06:41:00Z'), horsLigne: true, env: {} }));
+  assert.equal(e['courtiers-construction'].params, null, 'rec.params sans « q » compterait tous les 66.22Z de France');
+  assert.equal(e['btp-creations-zone'].params.activite_principale.includes('43.99C'), true, 'une recette à une recherche garde sa requête');
 });

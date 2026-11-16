@@ -17,7 +17,7 @@ import { ETAPES, FAMILLES, ISSUES } from './contrats.js';
 import { creerHorloge, creerBudget, creerHttp, creerMagasin, empreinte, sha256Texte, canon, valider, PLAFONDS, BudgetEpuise, PubliqueRefusee } from './socle.js';
 import { Registre, CLES } from './registre.js';
 import { observer as relever, rehydrater, cheminSerie } from './sources/observer.js';
-import { compter, echantillonPages, chercher, resumer, PAR_PAGE } from './sources/sirene.js';
+import { compter, echantillonPages, echantillonRecherches, chercher, resumer, PAR_PAGE } from './sources/sirene.js';
 import * as garde from './garde.js';
 import { chargerRecettes, compiler, appliquer, chiffresRecette, SCHEMA_RECETTE, SIGNAUX, PARAMS_AUTORISES, validerRecette, proposerRecette } from './recettes.js';
 import { preparer, echantillonMinimise, ligneEchantillon, pari as pariDeRevue, validerGabaritLLM } from './brouillons.js';
@@ -71,18 +71,33 @@ function lireSeries(magasin, { avant = null } = {}) {
   return out;
 }
 
-/** Requêtes et jugements déjà consommés ce jour (actes cycle du jour, demandes de jugement écrites). */
+/**
+ * Requêtes et jugements déjà consommés ce jour de Paris : actes cycle du jour, actes des commandes hors cycle (velyx
+ * marche, velyx cibler : champ requetes_hors_cycle) et demandes de jugement écrites. Un seul compteur pour tout le jour.
+ */
 function consommeDuJour(registre, magasin, jour, id) {
   const c = { codeur: 0, sirene: 0, jugements: (lireJsonSur(magasin, CH(id).aJuger) ?? []).length };
-  for (const l of registre.de('cycle', (x) => x.jour === jour)) { c.codeur += Number(l.requetes?.codeur) || 0; c.sirene += Number(l.requetes?.sirene) || 0; }
+  const ajouter = (r) => { c.codeur += Number(r?.codeur) || 0; c.sirene += Number(r?.sirene) || 0; };
+  for (const l of registre.de('cycle', (x) => x.jour === jour)) ajouter(l.requetes);
+  for (const l of registre.lignes) if (l.requetes_hors_cycle && typeof l.date === 'string' && creerHorloge(l.date).jour() === jour) ajouter(l.requetes_hors_cycle);
   return c;
+}
+
+/**
+ * Budget réseau restant au jour de Paris (plafonds de socle.PLAFONDS moins tout ce que le jour a déjà consommé) : le
+ * même compteur pour le cycle, velyx marche et velyx cibler. → {codeur, sirene, jugements}
+ */
+export function resteDuJour(registre, magasin, horloge, plafonds = PLAFONDS) {
+  const deja = consommeDuJour(registre, magasin, horloge.jour(), idCycle(horloge));
+  return Object.fromEntries(['codeur', 'sirene', 'jugements'].map((k) => [k, Math.max(0, (plafonds[k] ?? 0) - deja[k])]));
 }
 
 /**
  * Contexte d'un cycle (contrats.Ctx). Branche garde.verifierPublic (dictionnaire construit depuis prive/) sur le magasin,
  * charge la politique et les oppositions (OppositionsIndisponibles → mode « veille »). Le budget est celui qui reste
- * au jour de Paris (plafonds de socle.PLAFONDS moins les passages précédents). aBlanc : magasin en calque et registre en
- * copie mémoire, rien n'est écrit sur le disque. ctx.enCalque() rend un contexte à blanc posé sur celui-ci (SIMULER).
+ * au jour de Paris (plafonds de socle.PLAFONDS moins les passages précédents et les commandes marche et cibler du jour).
+ * aBlanc : magasin en calque, registre en copie mémoire et réseau limité au cache, rien n'est écrit sur le disque ni
+ * consommé du plafond. ctx.enCalque() rend un contexte à blanc posé sur celui-ci (SIMULER).
  */
 export function creerContexte({ racine, horloge = creerHorloge(), fetchImpl, aBlanc = false, horsLigne = false, attendre, env = process.env,
   plafonds = PLAFONDS } = {}) {
@@ -92,7 +107,8 @@ export function creerContexte({ racine, horloge = creerHorloge(), fetchImpl, aBl
   try { dict = garde.dictionnaire(creerMagasin(abs)); } catch (e) { erreurDict = e.message; }
   const reel = creerMagasin(abs, { verifierPublic: (rel, c) => garde.verifierPublic(rel, c, dict) });
   const magasin = aBlanc ? reel.enCalque() : reel;
-  const journal = new Registre(path.join(abs, 'registre', 'journal.jsonl'), { horloge });
+  // R-10 : le registre admet chaque acte par l'antifuite, avec le même dictionnaire (null s'il est incohérent : échec fermé).
+  const journal = new Registre(path.join(abs, 'registre', 'journal.jsonl'), { horloge, dict: erreurDict ? null : dict });
   const registre = aBlanc ? journal.copie() : journal;
   let oppositions = new Set(), mode = 'normal', motifVeille = null;
   try { oppositions = garde.chargerOppositions(magasin, registre); } catch (e) {
@@ -103,10 +119,12 @@ export function creerContexte({ racine, horloge = creerHorloge(), fetchImpl, aBl
   const reste = { ...plafonds };
   for (const k of ['codeur', 'sirene', 'jugements']) reste[k] = Math.max(0, (plafonds[k] ?? 0) - deja[k]);
   const budget = creerBudget(reste, horloge), cache = new Map();
-  const options = { budget, horloge, cache, env, horsLigne, ...(fetchImpl ? { fetchImpl } : {}), ...(attendre ? { attendre } : {}) };
+  // À blanc : réseau limité au cache, comme SIMULER. Une passe à blanc ne consigne rien, donc ne doit rien consommer du
+  // plafond du jour (R-43) ; elle rejoue l'analyse du jour (observation réhydratée) ou s'arrête sur un aveu en mémoire.
+  const options = { budget, horloge, cache, env, horsLigne: horsLigne || aBlanc, ...(fetchImpl ? { fetchImpl } : {}), ...(attendre ? { attendre } : {}) };
   const ctx = {
     racine: abs, jour, id, passage: null, horloge, budget, http: creerHttp(options), cache, magasin, registre,
-    politique: risque.chargerPolitique(abs), oppositions, dict, erreurDict, aBlanc, horsLigne, mode, motifVeille, plafonds, deja,
+    politique: risque.chargerPolitique(abs), oppositions, dict, erreurDict, aBlanc, horsLigne: horsLigne || aBlanc, mode, motifVeille, plafonds, deja,
     S: {}, jugements: new Map(), incidents: [], gestes: [], notifications: [], revuesAFaire: [], memoireAjouts: { echantillons: {} }, faitsPassage: [],
   };
   ctx.enCalque = () => {
@@ -151,14 +169,16 @@ function ecrirePublicSur(ctx, rel, contenu) {
 // Lectures dérivées du registre.
 
 /** Canaux : gestes du propriétaire et clauses de CGU consignées (faits cgu:<canal>). */
-function canauxDe(ctx) {
+const canauxDe = (ctx) => canauxDuRegistre(ctx.registre);
+/** Canaux lus dans le registre seul (gestes du propriétaire, clauses de CGU consignées) ; sert aussi à la CLI. */
+export function canauxDuRegistre(registre) {
   const pages = new Map();
-  for (const l of ctx.registre.de('fait', (x) => /^cgu:[a-z_]+$/.test(String(x.sujet)) && typeof x.valeur === 'string')) {
+  for (const l of registre.de('fait', (x) => /^cgu:[a-z_]+$/.test(String(x.sujet)) && typeof x.valeur === 'string')) {
     const canal = l.sujet.slice(4), p = pages.get(canal) ?? { canal, chemin: l.chemin ?? null, clauses: new Map(), ligne: l.n };
     p.clauses.set(l.mesure, { sujet: l.mesure, verdict: l.valeur }); p.ligne = l.n;
     pages.set(canal, p);
   }
-  return strat.calculerCanaux(ctx.registre, [...pages.values()].map((p) => ({ ...p, clauses: [...p.clauses.values()] })));
+  return strat.calculerCanaux(registre, [...pages.values()].map((p) => ({ ...p, clauses: [...p.clauses.values()] })));
 }
 
 function specsActives(ctx) { try { return chargerRecettes(ctx.magasin); } catch (e) { ctx.incidents.push(e.message); return {}; } }
@@ -168,16 +188,37 @@ function recetteCompilee(ctx, id, variables = {}) {
   return compiler(spec, ctx.horloge, variables);
 }
 
+/**
+ * Dernier échantillon d'une recette pour DÉCIDER (D5) : {ligne, jour, retenues, prive, vides}. retenues : fiches du
+ * fichier privé encore utilisables (oppositions connues exclues), sinon le compte de l'acte controle ; prive : fichier
+ * privé présent pour cette graine ; vides : échantillons consécutifs (jours distincts) sans fiche retenue. null si aucun.
+ */
+function etatEchantillon(ctx, id) {
+  const actes = ctx.registre.de('controle', (l) => l.objet === `echantillon:${id}`), ech = actes.at(-1);
+  if (!ech) return null;
+  const f = echantillonDe(ctx, id), prive = Boolean(f?.contenu && (!ech.graine || f.contenu.graine === ech.graine) && Array.isArray(f.contenu.fiches));
+  const retenues = prive ? f.contenu.fiches.filter((x) => !garde.estExclue(x, ctx.oppositions)).length : Number(ech.compte?.retenues) || 0;
+  const jours = [];
+  for (const l of [...actes].reverse()) {
+    if (Number(l.compte?.retenues) > 0) break;
+    const j = creerHorloge(l.date).jour();
+    if (!jours.includes(j)) jours.push(j);
+  }
+  return { ligne: ech.n, jour: creerHorloge(ech.date).jour(), retenues, prive, vides: retenues > 0 ? 0 : Math.max(jours.length, 1) };
+}
+
 /** État des recettes pour DÉCIDER : sonde, échantillon et liste v2 déjà consignés. */
-function etatRecettes(ctx) {
+export function etatRecettes(ctx) {
   const out = {};
   for (const [id, spec] of Object.entries(specsActives(ctx))) {
+    // params : la requête que le relevé du lendemain peut compter (sonde du plan d'observation). Une recette à plusieurs
+    // recherches (par nom) n'en a pas d'unique : rec.params sans « q » compterait une autre population ; sa sonde passe
+    // par l'action sonder, qui compte chaque recherche.
     let params = null;
-    try { params = compiler(spec, ctx.horloge).params; } catch { /* recette non compilable : sans sonde */ }
+    try { const rec = compiler(spec, ctx.horloge); params = rec.recherches.length === 1 ? rec.params : null; } catch { /* recette non compilable : sans sonde */ }
     const sonde = ctx.registre.derniere('fait', (l) => l.sujet === `sonde:${id}` && l.mesure === 'total' && Number.isFinite(l.valeur));
-    const ech = ctx.registre.derniere('controle', (l) => l.objet === `echantillon:${id}`);
     const liste = ctx.registre.derniere('cible', (l) => l.recette === id && l.v2 === true);
-    out[id] = { sonde: sonde ? { total: sonde.valeur, ligne: sonde.n } : null, echantillon: ech ? { ligne: ech.n } : null, liste: liste ? { ligne: liste.n } : null,
+    out[id] = { sonde: sonde ? { total: sonde.valeur, ligne: sonde.n } : null, echantillon: etatEchantillon(ctx, id), liste: liste ? { ligne: liste.n } : null,
       estimation_requetes: sonde ? Math.ceil(sonde.valeur / PAR_PAGE) + 1 : null, candidate_le: spec.statut === 'candidate' ? spec.candidate_le ?? null : null, params };
   }
   return out;
@@ -197,6 +238,11 @@ function parisEnrichis(ctx) {
   const actes = new Map(ctx.registre.de('pari').map((l) => [l.id, l]));
   return ctx.registre.etat().paris.map((p) => ({ ...p, annonce: idAnnonce(actes.get(p.id)?.annonce), recette: actes.get(p.id)?.recette ?? null }));
 }
+
+/** Dernier statut déclaré par le propriétaire (geste « statut … »), ou null. */
+const statutProprietaire = (ctx) => ctx.registre.derniere('geste', (l) => l.auteur === 'proprietaire' && l.sujet === 'statut')?.valeur ?? null;
+/** Plafond de dépense de politique.json (0 si absent ou illisible : échec fermé). */
+const plafondEur = (ctx) => { const v = ctx.politique?.politique?.depense?.plafond_eur; return typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : 0; };
 
 function contexteRisque(ctx, canaux = canauxDe(ctx)) {
   return risque.contexte(ctx.registre, { racine: ctx.racine, budget: ctx.budget, horloge: ctx.horloge, oppositions_dispo: ctx.mode !== 'veille',
@@ -274,7 +320,7 @@ const ENTREES = Object.freeze({
   },
   ecrire_recette(a, ctx) {
     const an = annonceLue(ctx, a.params?.annonce ?? a.ref);
-    if (!an) return null;
+    if (!an || ![an.titre, an.resume, an.description].some(Boolean)) return null;
     const exemple = specsActives(ctx)['btp-creations-zone'] ?? null;
     return { donnee: [an.titre, an.resume, an.description].filter(Boolean).join('\n'),
       contexte: { annonce_id: String(an.id), annonce: `https://www.codeur.com/projects/${an.id}`, primitives: Object.keys(SIGNAUX), params_autorises: [...PARAMS_AUTORISES], exemple } };
@@ -291,7 +337,7 @@ const ENTREES = Object.freeze({
   },
   classer_annonce(a, ctx) {
     const an = annonceLue(ctx, a.ref);
-    return an ? { donnee: [an.titre, an.resume, an.description].filter(Boolean).join('\n'), contexte: { annonce_id: String(an.id) } } : null;
+    return an && [an.titre, an.resume, an.description].some(Boolean) ? { donnee: [an.titre, an.resume, an.description].filter(Boolean).join('\n'), contexte: { annonce_id: String(an.id) } } : null;
   },
   ecrire_gabarit(a, ctx) {
     const an = annonceLue(ctx, a.ref);
@@ -448,19 +494,123 @@ const GESTES_PREALABLE = Object.freeze({
   cgu: 'lire la fiche ; VELYX cite les CGU de codeur.com par le jugement lire_cgu',
 });
 
+/** Totaux par recherche d'une sonde (dans l'ordre de rec.recherches), ou undefined s'il en manque un. */
+function sousTotaux(sonde, rec) {
+  if (!Array.isArray(sonde?.sous_totaux)) return undefined;
+  const t = rec.recherches.map((q) => sonde.sous_totaux.find((x) => x?.q === (q.q ?? null))?.total);
+  return t.every((x) => Number.isFinite(x)) ? t : undefined;
+}
+
 function echantillonDe(ctx, recette) {
   const f = ctx.magasin.lister('prive/listes/').filter((r) => r.startsWith(`prive/listes/echantillon-${recette}-`) && r.endsWith('.json')).sort().at(-1);
   return f ? { fichier: f, contenu: lireJsonSur(ctx.magasin, f) } : null;
 }
 
+/**
+ * Échantillon montré au tiers, recalculé à chaque brouillon depuis les fiches privées contrôlées, filtrées par les
+ * oppositions connues à cet instant (R-12, R-13) : jamais une copie minimisée plus ancienne qu'une opposition. Une fiche
+ * retirée depuis l'échantillonnage (opposition reçue, purge) sort aussi du compte des retenues.
+ * → {lignes: EntrepriseMinimisee[], sirens: string[] (index privé de la revue), compte}
+ */
+export function echantillonCourant(s, { oppositions = new Set(), horloge, dict = null } = {}) {
+  if (!Array.isArray(s?.fiches)) throw new Error('échantillon privé sans fiches contrôlées : echantillonner à nouveau (aucune copie minimisée n’est réutilisée)');
+  const fiches = s.fiches.filter((f) => !garde.estExclue(f, oppositions));
+  const retirees = s.fiches.length - fiches.length, c = s.compte ?? {};
+  const compte = retirees && Number.isFinite(c.retenues) ? { ...c, retenues: Math.max(0, c.retenues - retirees), exclues: (c.exclues ?? 0) + retirees } : c;
+  const lignes = echantillonMinimise(fiches, { horloge, dict });
+  return { lignes, sirens: fiches.slice(0, lignes.length).map((f) => String(f.siren)).filter((x) => /^\d{9}$/.test(x)), compte };
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// E-mail B2B aux courtiers en assurance construction (gabarit courtiers-construction, M6) : deux listes croisées.
+// Destinataires : cabinets de la dernière liste courtiers-construction (oppositions exclues), d'un département. Lignes et
+// comptes : btp-creations-zone du MÊME département (dernière liste contrôlée, sinon dernier échantillon), recalculés
+// depuis les fiches privées à chaque brouillon (une opposition reçue entre-temps n'y survit pas).
+
+const DEP_COURTIER = /^(?:\d{2}|2A|2B|97\d)$/;
+const dateFichier = (f) => /(\d{4}-\d{2}-\d{2})\.json$/.exec(f)?.[1] ?? '';
+function fichesDe(ctx, f) {
+  const c = lireJsonSur(ctx.magasin, f), brutes = Array.isArray(c?.cibles) ? c.cibles : Array.isArray(c?.fiches) ? c.fiches : null;
+  return brutes ? { fichier: f, contenu: c, fiches: brutes.filter((x) => !garde.estExclue(x, ctx.oppositions)), echantillon: f.startsWith('prive/listes/echantillon-') } : null;
+}
+/** Source btp-creations-zone par département : la plus récente (à date égale, la liste plutôt que l'échantillon). */
+function sourcesBtp(ctx) {
+  const out = new Map();
+  const fichiers = ctx.magasin.lister('prive/listes/').filter((f) => f.endsWith('.json') && (f.startsWith('prive/listes/btp-creations-zone-') || f.startsWith('prive/listes/echantillon-btp-creations-zone-')));
+  for (const f of fichiers.sort((x, y) => dateFichier(x).localeCompare(dateFichier(y)) || Number(y.includes('/echantillon-')) - Number(x.includes('/echantillon-')))) {
+    const s = fichesDe(ctx, f);
+    const dep = s && String(s.contenu.variables?.departement ?? s.fiches[0]?.departement ?? '');
+    if (s && DEP_COURTIER.test(dep) && s.fiches.length) out.set(dep, s);
+  }
+  return out;
+}
+/** Cabinets de la dernière liste courtiers-construction, par département du siège (oppositions exclues). */
+function destinatairesCourtiers(ctx) {
+  const f = ctx.magasin.lister('prive/listes/').filter((x) => x.startsWith('prive/listes/courtiers-construction-') && x.endsWith('.json')).sort((x, y) => dateFichier(x).localeCompare(dateFichier(y))).at(-1);
+  const s = f ? fichesDe(ctx, f) : null, par = new Map();
+  for (const e of s?.fiches ?? []) { const d = String(e.departement ?? ''); if (DEP_COURTIER.test(d)) { if (!par.has(d)) par.set(d, []); par.get(d).push(e); } }
+  return { fichier: f ?? null, par };
+}
+/**
+ * Départements où un e-mail aux courtiers peut se préparer : {departement, destinataires: n, fiches: n, lu_le}[] (comptes
+ * seuls, sans nom). fraiches (DÉCIDER) : seulement une source btp-creations-zone lue depuis 7 j au plus (B4), pour ne pas
+ * décider chaque jour un brouillon que le contrôle B4 refuserait.
+ */
+export function etatCourtiers(ctx, { fraiches = true } = {}) {
+  const btp = sourcesBtp(ctx), { par } = destinatairesCourtiers(ctx), limite = Date.parse(ctx.horloge.iso()) - 7 * 864e5;
+  return [...par].filter(([d]) => btp.has(d) && (!fraiches || Date.parse(btp.get(d).contenu.lu_le) >= limite))
+    .map(([d, l]) => ({ departement: d, destinataires: l.length, fiches: btp.get(d).fiches.length, lu_le: btp.get(d).contenu.lu_le ?? null }))
+    .sort((a, b) => b.destinataires - a.destinataires || a.departement.localeCompare(b.departement));
+}
+
+/**
+ * Prépare l'e-mail aux courtiers d'un département (sans département : celui qui a le plus de cabinets et une source
+ * btp-creations-zone). → {departement, ok, controles, bloquants, revue: entrée de risque.mettreEnRevue}. Lève si un
+ * des deux côtés manque (aucun cabinet, aucune fiche btp-creations-zone du département).
+ */
+export function brouillonCourtiers(ctx, { departement = null } = {}) {
+  const dests = destinatairesCourtiers(ctx), btp = sourcesBtp(ctx);
+  if (!dests.fichier) throw new Error('aucune liste courtiers-construction dans prive/listes : lancer d’abord « velyx cibler courtiers-construction »');
+  const dep = departement ?? etatCourtiers(ctx, { fraiches: false })[0]?.departement ?? null;
+  if (!dep || !DEP_COURTIER.test(String(dep))) throw new Error('aucun département avec à la fois des cabinets de courtage et des fiches btp-creations-zone : « velyx cibler btp-creations-zone --departement <dep> »');
+  const cabinets = dests.par.get(String(dep)) ?? [], src = btp.get(String(dep));
+  if (!cabinets.length) throw new Error(`aucun cabinet de courtage du département ${dep} dans ${dests.fichier} (oppositions exclues)`);
+  if (!src) throw new Error(`aucune fiche btp-creations-zone du département ${dep} : « velyx cibler btp-creations-zone --departement ${dep} »`);
+  const mois = Number.isInteger(src.contenu.variables?.mois) ? src.contenu.variables.mois : undefined;
+  const rec = recetteCompilee(ctx, 'btp-creations-zone', { departement: String(dep), ...(mois ? { mois } : {}) });
+  const parSignal = Object.fromEntries(rec.codes_signaux.map((c) => [c, 0]));
+  for (const e of src.fiches) for (const x of e.signaux ?? []) parSignal[x.code] = (parSignal[x.code] ?? 0) + 1;
+  const complet = src.echantillon ? false : src.contenu.complet === true;
+  const lignes = echantillonMinimise(src.fiches, { horloge: ctx.horloge, dict: ctx.dict });
+  const p = preparer('courtiers-construction', {
+    compte: { retenues: src.fiches.length, par_signal: parSignal }, params: chiffresRecette(rec), limites: rec.limites,
+    lecture: { complet, lu_le: src.contenu.lu_le }, echantillon: { lignes, departement: String(dep) },
+    sources: { compte: `${src.fichier} (fiches contrôlées, oppositions exclues)`, param: 'etat/recettes/btp-creations-zone.json', echantillon: src.fichier },
+  }, { horloge: ctx.horloge, dict: ctx.dict });
+  const bloquants = p.controles.filter((c) => c.gravite === 'bloquant' && !c.ok);
+  const liste = cabinets.map((e) => `- ${e.nom ?? '—'} · ${e.commune ?? '—'} (${e.departement}) · SIREN ${e.siren} · ${e.fiche ?? ''}`).join('\n');
+  const notes = [p.notes, `## Destinataires (${cabinets.length} cabinet(s) du département ${dep}, ${dests.fichier} ; un message par cabinet, à son adresse professionnelle)\n\n${liste}`].filter(Boolean).join('\n\n');
+  const sirens = [...new Set([...src.fiches.slice(0, lignes.length), ...cabinets].map((e) => String(e.siren)).filter((x) => /^\d{9}$/.test(x)))];
+  return { departement: String(dep), ok: bloquants.length === 0, controles: p.controles, bloquants, revue: {
+    type: 'proposition', ref: `courtiers-construction:${dep}`, texte: p.texte, canal: 'email', recette: 'courtiers-construction', annonce: null, controles: p.controles, notes, sirens,
+    geste: 'relire la fiche, compléter les champs entre crochets et fixer le prix, envoyer soi-même un message par cabinet (email), puis « envoye <R-id> canal=email »',
+    affirme: ['chiffres tirés du registre officiel, sur les fiches contrôlées du département (« au moins » si la lecture est partielle)'],
+    ne_promet_pas: ['ni exhaustivité, ni qu’une entreprise récente est sans assureur, ni chiffre d’affaires'], ancres_prix: [] } };
+}
+
 async function brouillon(a, ctx, { regeneration = false } = {}) {
+  if (a.params?.recette === 'courtiers-construction') {
+    const d = brouillonCourtiers(ctx, { departement: a.params?.departement ?? null });
+    return vide({ controles: d.controles, revues: [{ ...d.revue, regeneration }] });
+  }
   const id = a.params?.recette, rec = recetteCompilee(ctx, id), e = echantillonDe(ctx, id);
   if (!e?.contenu) throw new Error(`aucun échantillon privé pour ${id} : echantillonner d’abord`);
   const s = e.contenu, sonde = ctx.registre.derniere('fait', (l) => l.sujet === `sonde:${id}` && l.mesure === 'total');
   const annonce = annonceLue(ctx, a.ref);
+  const courant = echantillonCourant(s, { oppositions: ctx.oppositions, horloge: ctx.horloge, dict: ctx.dict });
   const p = preparer(rec.gabarit, {
-    compte: s.compte, sonde: sonde ? { total_brut: sonde.valeur, lu_le: sonde.date } : undefined,
-    echantillon: { lignes: s.minimise, lues: s.compte?.lues, ecartees: (s.compte?.exclues ?? 0) + (s.compte?.hors_recette ?? 0), pages: s.pages, graine: s.graine,
+    compte: courant.compte, sonde: sonde ? { total_brut: sonde.valeur, lu_le: sonde.date } : undefined,
+    echantillon: { lignes: courant.lignes, lues: courant.compte?.lues, ecartees: (courant.compte?.exclues ?? 0) + (courant.compte?.hors_recette ?? 0), pages: s.pages, graine: s.graine,
       departement: rec.variables?.departement ?? null },
     lecture: { complet: false, lu_le: s.lu_le }, limites: rec.limites, annonce: { url: `https://www.codeur.com/projects/${a.ref}` }, params: chiffresRecette(rec),
     sources: { compte: `${e.fichier} (échantillon contrôlé)`, sonde: sonde ? `registre, ligne ${sonde.n}` : 'sonde absente', param: `etat/recettes/${id}.json`, echantillon: e.fichier },
@@ -469,7 +619,7 @@ async function brouillon(a, ctx, { regeneration = false } = {}) {
   return vide({ controles: p.controles, revues: [{ type: 'proposition', ref: String(a.ref), texte: p.texte, canal, annonce: String(a.ref), recette: id, regeneration,
     geste: `relire la fiche, compléter les champs entre crochets et fixer le prix, envoyer soi-même (${canal}), puis « envoye <R-id> canal=${canal} »`,
     controles: p.controles, affirme: ['chiffres tirés du registre officiel, lecture partielle (« au moins »)'], ne_promet_pas: ['ni exhaustivité, ni rendez-vous, ni chiffre d’affaires'],
-    ancres_prix: [] }] });
+    ancres_prix: [], notes: p.notes, sirens: courant.sirens }] });
 }
 
 /** Exécutants des 24 types d'action (contrats.TYPES_ACTION). */
@@ -486,7 +636,7 @@ export const EXECUTANTS = Object.freeze({
       ctx.faitsPassage.push(...faits.map((f) => ({ ...f, ligne: ctx.registre.trouver(f.id)?.n ?? null })));
       return vide({ actes });
     }
-    if (!pageLue(ctx, a.params?.chemin)) return vide({ note: 'page non lue ce jour : lecture planifiée au prochain relevé' });
+    if (!pageLue(ctx, a.params?.chemin)) return vide({ note: 'page non lue ce jour : lecture planifiée au prochain relevé', reportee: true });
     const demandes = demanderJugements([a], ctx);
     return vide({ demandes, en_attente: true });
   },
@@ -495,8 +645,11 @@ export const EXECUTANTS = Object.freeze({
     if (ctx.registre.trouver(cle)) return vide({ note: 'sonde déjà consignée ce jour' });
     const rec = recetteCompilee(ctx, id);
     let total = 0, plafond = false;
-    for (const q of rec.recherches) { const c = await compter(ctx.http, q); total += c.total; plafond ||= c.plafond; }
-    return vide({ actes: consigner(ctx, [{ type: 'fait', cle, sujet: `sonde:${id}`, mesure: 'total', valeur: total, n_fait: 1, source: 'sirene:compte', plafond, requetes: rec.recherches.length, sain: true }]) });
+    const sous = [];
+    for (const q of rec.recherches) { const c = await compter(ctx.http, q); total += c.total; plafond ||= c.plafond; sous.push({ q: q.q ?? null, total: c.total }); }
+    // Recherche par nom : le total de chaque recherche est gardé, pour que l'échantillon soit tiré dans cette même population.
+    return vide({ actes: consigner(ctx, [{ type: 'fait', cle, sujet: `sonde:${id}`, mesure: 'total', valeur: total, n_fait: 1, source: 'sirene:compte', plafond, requetes: rec.recherches.length,
+      ...(rec.recherches.length > 1 ? { sous_totaux: sous } : {}), sain: true }]) });
   }, (a, ctx) => {
     const id = a.params?.recette ?? a.ref;
     if (ctx.registre.trouver(CLES.fait(`sonde:${id}`, 'total', ctx.jour))) return { codeur: 0, sirene: 0 };
@@ -507,13 +660,18 @@ export const EXECUTANTS = Object.freeze({
     const deja = echantillonDe(ctx, id);
     if (deja?.contenu?.graine === graine) return vide({ note: 'échantillon du jour déjà lu' });
     const sonde = ctx.registre.derniere('fait', (l) => l.sujet === `sonde:${id}` && l.mesure === 'total' && Number.isFinite(l.valeur));
-    const lu = await echantillonPages(ctx.http, rec.params, { k: a.params?.pages ?? 2, graine, total_pages: sonde ? Math.ceil(sonde.valeur / PAR_PAGE) : undefined });
+    // Plusieurs recherches (recette par nom) : l'échantillon est tiré dans la population que la sonde a comptée, page par
+    // page dans chaque recherche ; jamais dans rec.params, qui n'a pas de « q » (tous les 66.22Z de France).
+    const lu = rec.recherches.length > 1
+      ? await echantillonRecherches(ctx.http, rec.recherches, { k: a.params?.pages ?? 2, graine, totaux: sousTotaux(sonde, rec) })
+      : await echantillonPages(ctx.http, rec.params, { k: a.params?.pages ?? 2, graine, total_pages: sonde ? Math.ceil(sonde.valeur / PAR_PAGE) : undefined });
     const entreprises = lu.fiches.map(resumer);
     const r = appliquer(rec, entreprises, { horloge: ctx.horloge, oppositions: ctx.oppositions, dict: ctx.dict, lecture: { complet: false } });
-    const minimise = echantillonMinimise(r.gardees, { horloge: ctx.horloge, dict: ctx.dict });
+    // Seules les fiches contrôlées sont gardées : l'échantillon minimisé se recalcule à chaque brouillon (echantillonCourant),
+    // jamais recopié, pour qu'une opposition reçue après coup ne survive pas dans une copie sans SIREN.
     const fichier = `prive/listes/echantillon-${id}-${ctx.jour}.json`;
     const compte = { ...r.compte, total: lu.total, pages: lu.pages.length };
-    ctx.magasin.ecrirePrive(fichier, { recette: id, graine, pages: lu.pages, lu_le: lu.lu_le, total: lu.total, compte, minimise, fiches: r.gardees });
+    ctx.magasin.ecrirePrive(fichier, { recette: id, graine, pages: lu.pages, ...(lu.tirage ? { tirage: lu.tirage } : {}), lu_le: lu.lu_le, total: lu.total, compte, fiches: r.gardees });
     ctx.memoireAjouts.echantillons[`E-${id}-${ctx.jour}`] = { sirens: r.gardees.slice(0, 10).map((x) => String(x.siren)), graine };
     const resultats = r.resultats.map((x) => ({ code: x.code, gravite: x.gravite, ok: x.ok, n_concernes: x.n_concernes }));
     const actes = consigner(ctx, [{ type: 'controle', cle: CLES.controle(`echantillon:${id}`, empreinte({ graine, pages: lu.pages })), objet: `echantillon:${id}`,
@@ -525,7 +683,10 @@ export const EXECUTANTS = Object.freeze({
     return vide({ actes, fichiers: [fichier], controles: r.resultats, demandes });
   }, (a, ctx) => {
     const id = a.params?.recette ?? a.ref, sonde = ctx.registre.derniere('fait', (l) => l.sujet === `sonde:${id}` && l.mesure === 'total');
-    return { codeur: 0, sirene: (a.params?.pages ?? 2) + (sonde ? 0 : 1) };
+    let rec = null;
+    try { rec = recetteCompilee(ctx, id); } catch { rec = null; }
+    const comptes = rec && rec.recherches.length > 1 ? (sousTotaux(sonde, rec) ? 0 : rec.recherches.length) : sonde ? 0 : 1;
+    return { codeur: 0, sirene: (a.params?.pages ?? 2) + comptes };
   }),
   construire_liste: reseau(async (a, ctx) => {
     const id = a.params?.recette ?? a.ref, rec = recetteCompilee(ctx, id, a.params?.variables ?? {});
@@ -552,32 +713,41 @@ export const EXECUTANTS = Object.freeze({
   },
   rediger_brouillon: (a, ctx) => brouillon(a, ctx),
   regenerer_brouillon: (a, ctx) => brouillon(a, ctx, { regeneration: true }),
+  // Le texte soumis (couvert par l'empreinte, publié ou envoyé tel quel) est exactement celui qu'ont vu les contrôles ;
+  // les notes du propriétaire et les repères de prix vont dans la fiche privée, hors des marqueurs du texte.
   async preparer_prealable(a) {
     const sujet = a.params?.sujet ?? a.ref, p = preparer(`prealable-${sujet}`, {});
-    return vide({ controles: p.controles, revues: [{ type: 'prealable', ref: String(a.ref ?? sujet), texte: `${p.texte}\n\n${p.notes}`, geste: GESTES_PREALABLE[sujet] ?? 'lire la fiche et décider', controles: p.controles }] });
+    return vide({ controles: p.controles, revues: [{ type: 'prealable', ref: String(a.ref ?? sujet), texte: p.texte, notes: p.notes, geste: GESTES_PREALABLE[sujet] ?? 'lire la fiche et décider', controles: p.controles }] });
   },
   async preparer_kit_canal(a) {
     const canaux = (a.params?.canaux ?? []).filter((c) => ['comeup', 'malt'].includes(c));
     if (!canaux.length) return vide({ note: 'aucun canal à kit' });
     const kits = canaux.map((c) => preparer(`kit-${c}`, {}));
-    const texte = kits.map((k, i) => `## Kit ${canaux[i]}\n\n${k.texte}\n\n${k.notes}`).join('\n\n---\n\n');
+    const texte = kits.map((k, i) => `## Kit ${canaux[i]}\n\n${k.texte}`).join('\n\n---\n\n');
+    const notes = kits.map((k, i) => (k.notes ? `### Kit ${canaux[i]}\n\n${k.notes}` : '')).filter(Boolean).join('\n\n');
     const controles = kits.flatMap((k) => k.controles);
-    return vide({ controles, revues: [{ type: 'kit_canal', ref: String(a.ref ?? a.params?.segment), texte, controles,
+    return vide({ controles, revues: [{ type: 'kit_canal', ref: String(a.ref ?? a.params?.segment), texte, notes, controles,
       geste: `publier soi-même le service ou le profil (${canaux.join(' ou ')}), fixer le prix parmi les repères, puis « canal ${canaux[0]} ouvert »` }] });
   },
   async invalider_revue(a, ctx) {
-    const id = String(a.ref ?? '');
-    if (!risque.revuesDe(ctx.registre, ctx.horloge).some((r) => r.id === id)) return vide({ note: `revue ${id} inconnue` });
-    return vide({ actes: consigner(ctx, [{ type: 'decision', action: 'invalider_revue', verdict: 'autorise', regle: 'R-28', revue: id, motif: tronquer(a.params?.motif ?? 'caduque', 200), cle: `caduque:${id}` }]) });
+    const id = String(a.ref ?? ''), r = risque.revuesDe(ctx.registre, ctx.horloge).find((x) => x.id === id);
+    if (!r) return vide({ note: `revue ${id} inconnue` });
+    const motif = tronquer(a.params?.motif ?? 'caduque', 200), g = motif === 'satisfait' ? risque.gesteSatisfaisant(ctx.registre, r) : null;
+    return vide({ actes: consigner(ctx, [{ type: 'decision', action: 'invalider_revue', verdict: 'autorise', regle: 'R-28', revue: id, motif, ...(g ? { geste_ligne: g.n } : {}), cle: `caduque:${id}` }]) });
   },
   async clore_pari_caduc(a, ctx) {
     return vide({ actes: consigner(ctx, [{ type: 'cloture', pari: a.ref, motif: 'caduc', raison: tronquer(a.params?.motif ?? a.raison ?? 'caduc', 200), cle: CLES.cloture(a.ref) }]) });
   },
   async demander_issue(a) { return vide({ gestes: [{ id: a.ref, geste: `reponse ${a.ref} <${ISSUES.join('|')}>`, depuis_h: null }] }); },
   async purger_opposition(a, ctx) {
-    const fichiers = [];
-    for (const siren of ctx.oppositions) fichiers.push(...garde.purgerPrive(ctx.magasin, { motif: 'opposition', siren, horloge: ctx.horloge }).supprimes);
-    return vide({ fichiers });
+    const fichiers = [], actes = [];
+    for (const siren of ctx.oppositions) {
+      // R-13 : les revues actives dont l'échantillon montre l'entreprise deviennent caduques, avant la purge de leur index.
+      actes.push(...consigner(ctx, risque.revuesAvecSiren(siren, { registre: ctx.registre, magasin: ctx.magasin, horloge: ctx.horloge }).map((r) => ({ type: 'decision',
+        action: 'invalider_revue', verdict: 'autorise', regle: 'R-13', revue: r.id, motif: 'opposition reçue pour une entreprise de l’échantillon', cle: `caduque:${r.id}` }))));
+      fichiers.push(...garde.purgerPrive(ctx.magasin, { motif: 'opposition', siren, horloge: ctx.horloge }).supprimes);
+    }
+    return vide({ fichiers, actes });
   },
   async ecrire_lecon(a, ctx) {
     const valeur = ctx.jugements.get(a.cle);
@@ -759,7 +929,13 @@ const ETAPE = {
   comprendre: (ctx) => analyse(ctx, 'comprendre', async () => {
     const r = monde.comprendre(ctx.S.observer, { monde: monde.chargerMonde(ctx.magasin), horloge: ctx.horloge, series: lireSeries(ctx.magasin, { avant: ctx.jour }) });
     consigner(ctx, r.actes);
-    return { sortie: { faits: r.faits.map((f) => ({ ...f, ligne: ctx.registre.trouver(f.id)?.n ?? null })), annonces: r.annonces } };
+    // Un fait déjà consigné ce jour fait foi (le registre est la seule mémoire durable) : recalculé sur une observation
+    // réhydratée (conteneur neuf, sans texte), il ne le contredit jamais, et DÉCIDER raisonne sur les mêmes valeurs.
+    const faits = r.faits.map((f) => {
+      const l = ctx.registre.trouver(f.id);
+      return l ? { ...f, valeur: Object.hasOwn(l, 'valeur') ? l.valeur : null, n: l.n_fait ?? f.n, ligne: l.n } : { ...f, ligne: null };
+    });
+    return { sortie: { faits, annonces: r.annonces } };
   }),
   confronter: (ctx) => analyse(ctx, 'confronter', async () => {
     const c = monde.confronter(ctx.S.comprendre.faits, monde.chargerMonde(ctx.magasin));
@@ -788,19 +964,29 @@ const ETAPE = {
   prioriser: (ctx) => analyse(ctx, 'prioriser', async () => {
     const canaux = canauxDe(ctx), m = monde.chargerMonde(ctx.magasin);
     return { sortie: strat.prioriser({ opportunites: ctx.S.anticiper.opportunites, risques: ctx.S.anticiper.risques, revues_ouvertes: risque.fileOuverte(ctx.registre, ctx.horloge),
-      canaux, prealables: strat.prealablesOuverts(m, canaux), encaisse_eur: ctx.registre.etat().encaisse_eur }) };
+      canaux, prealables: strat.prealablesOuverts(m, canaux, { statut_proprietaire: statutProprietaire(ctx) }), encaisse_eur: ctx.registre.etat().encaisse_eur, plafond_eur: plafondEur(ctx) }) };
   }),
   decider: (ctx) => analyse(ctx, 'decider', async () => {
-    const canaux = canauxDe(ctx), propositions = propositionsDuReve(ctx);
+    // Conteneur neuf le même jour : les décisions du jour sont relues au registre, jamais recalculées sur une observation
+    // réhydratée (sans texte) qui en donnerait d'autres.
+    const relues = ctx.S.observer?.rehydratee ? decisionsDuJour(ctx) : [];
+    if (relues.length) return { statut: 'reutilise', sortie: { actions: relues, depuis_registre: true } };
+    const canaux = canauxDe(ctx), propositions = propositionsDuReve(ctx), recettes = etatRecettes(ctx);
     const actions = strat.decider(ctx.S.prioriser.file, { monde: monde.chargerMonde(ctx.magasin), canaux, revues_ouvertes: risque.fileOuverte(ctx.registre, ctx.horloge),
       paris: parisEnrichis(ctx), encaisse_eur: ctx.registre.etat().encaisse_eur, cycles_sans_geste: risque.cyclesSansGeste(ctx.registre).n,
-      constats_bloquants: constatsBloquants(ctx), budget_reste: reste(ctx), recettes: etatRecettes(ctx), horloge: ctx.horloge, cycle: ctx.id, propositions: propositions.actions });
+      constats_bloquants: constatsBloquants(ctx), budget_reste: reste(ctx), recettes, horloge: ctx.horloge, cycle: ctx.id, propositions: propositions.actions,
+      plafond_eur: plafondEur(ctx), statut_proprietaire: statutProprietaire(ctx), courtiers: etatCourtiers(ctx), revues: risque.revuesDe(ctx.registre, ctx.horloge) });
     const cx = contexteRisque(ctx, canaux), evaluees = actions.map((a) => ({ ...a, verdict: risque.evaluer(a, cx) }));
     consigner(ctx, evaluees.map(({ verdict: v, ...a }) => (v.verdict === 'interdit'
       ? { type: 'refus', cle: CLES.refus(a.cle, ctx.jour), action: a.type, ref: a.ref, regle: v.regle, motif: tronquer(v.motif, 300), action_id: a.id }
       : { type: 'decision', cle: CLES.decision(a.cle, ctx.jour), action: a.type, ref: a.ref, params: a.params, verdict: v.verdict, regle: v.regle, motif: tronquer(v.motif, 300),
         raison: a.raison, action_id: a.id, jugement: a.jugement?.type ?? null })));
     for (const f of propositions.fichiers) ctx.magasin.ecrirePrive(f.rel, { ...f.contenu, consommees_le: ctx.jour });
+    for (const [id, r] of Object.entries(recettes)) {
+      if (r.echantillon?.retenues === 0 && r.echantillon.vides >= strat.SEUILS.echantillons_vides) {
+        aveu(ctx, `aveu:recette-sans-cible:${id}:${r.echantillon.ligne}`, `recette ${id} sans cible : ${r.echantillon.vides} échantillons tirés sans fiche retenue (dernier, ligne ${r.echantillon.ligne}) ; écartée par D5, aucun brouillon ni nouvel échantillon`);
+      }
+    }
     return { sortie: { actions: evaluees } };
   }),
 
@@ -824,24 +1010,35 @@ const ETAPE = {
     }
     return { statut: 'fait', sortie: { simulations: sims } };
   },
+  // Un budget épuisé en cours d'exécution (429 réessayé au-delà de l'estimation, durée dépassée) arrête l'action fautive
+  // et les actions réseau qui suivent (reportées : retentées au passage suivant si le budget le permet), jamais l'étape :
+  // les actions déjà exécutées gardent leurs revues, que REVUE met en file (rien n'est perdu entre EXÉCUTER et REVUE).
   async executer(ctx) {
     const faites = [];
+    let epuise = null;
     for (const s of (ctx.S.simuler?.simulations ?? []).filter((x) => x.ok)) {
       const a = ctx.S.decider.actions.find((x) => x.cle === s.cle);
+      if (epuise && (epuise.source === 'duree_s' || EXECUTANTS[a.type]?.reseau)) {
+        faites.push({ cle: a.cle, type: a.type, statut: 'reportee', motif: tronquer(`budget épuisé (${epuise.message}) : reportée au passage suivant`, 200) });
+        continue;
+      }
       try {
         const r = await executer(a, a.verdict, s, ctx);
         ctx.revuesAFaire.push(...(r.revues ?? []).map((x) => ({ ...x, action: a.cle })));
         ctx.gestes.push(...(r.gestes ?? []));
-        marquer(ctx, a, r.en_attente ? 'en_attente_jugement' : 'executee', r.note ?? null);
-        faites.push({ cle: a.cle, type: a.type, statut: r.en_attente ? 'en_attente_jugement' : 'executee', actes: (r.actes ?? []).length, fichiers: r.fichiers ?? [], demandes: (r.demandes ?? []).map((d) => d.id) });
+        // Une action qui n'a rien pu faire ce jour (page ou texte privé absent : conteneur neuf) n'est pas « executee » :
+        // elle reste à refaire au prochain relevé ; une attente de jugement sans demande écrite non plus.
+        const statut = r.reportee || (r.en_attente && !(r.demandes ?? []).length) ? 'reportee' : r.en_attente ? 'en_attente_jugement' : 'executee';
+        marquer(ctx, a, statut, r.note ?? (statut === 'reportee' ? 'entrée du jugement indisponible ce jour (texte privé absent) : au prochain relevé' : null));
+        faites.push({ cle: a.cle, type: a.type, statut, actes: (r.actes ?? []).length, fichiers: r.fichiers ?? [], demandes: (r.demandes ?? []).map((d) => d.id) });
       } catch (e) {
-        if (e instanceof BudgetEpuise) { marquer(ctx, a, 'echec', e.message); throw e; }
+        if (e instanceof BudgetEpuise) epuise = e;
         marquer(ctx, a, 'echec', e.message);
         aveu(ctx, `aveu:execution:${a.cle}:${ctx.jour}`, `action ${a.type} (${a.ref ?? '—'}) en échec : ${e.message}`);
         faites.push({ cle: a.cle, type: a.type, statut: 'echec', motif: tronquer(e.message, 200) });
       }
     }
-    return { statut: 'fait', sortie: { executees: faites } };
+    return { statut: epuise ? 'budget' : 'fait', sortie: { executees: faites, ...(epuise ? { budget_epuise: tronquer(epuise.message, 200) } : {}) } };
   },
   async revue(ctx) {
     const ids = [], remplacees = [];
@@ -931,6 +1128,21 @@ const ETAPE = {
   },
 };
 
+/** Actions du jour reconstruites depuis les actes decision et refus du registre (ids A-<cycle>-k), dans leur ordre. */
+function decisionsDuJour(ctx) {
+  const prefixe = `A-${ctx.id}-`, out = [], vus = new Set();
+  for (const l of ctx.registre.lignes) {
+    if (!['decision', 'refus'].includes(l.type) || typeof l.action_id !== 'string' || !l.action_id.startsWith(prefixe) || vus.has(l.action_id)) continue;
+    const m = new RegExp(`^${l.type}:(.+):${ctx.jour}$`).exec(String(l.cle ?? ''));
+    if (!m) continue;
+    vus.add(l.action_id);
+    out.push({ id: l.action_id, type: l.action, ref: l.ref ?? null, params: l.params ?? {}, raison: l.raison ?? '', cle: m[1],
+      jugement: l.jugement ? { type: l.jugement, statut: 'demande' } : null,
+      verdict: { verdict: l.type === 'refus' ? 'interdit' : l.verdict, regle: l.regle, motif: l.motif ?? '' } });
+  }
+  return out;
+}
+
 function propositionsDuReve(ctx) {
   const fichiers = [], actions = [];
   for (const rel of ctx.magasin.lister('prive/reve/').filter((f) => f.endsWith('.json'))) {
@@ -987,7 +1199,7 @@ export function retour(rapport, ctx) {
   if (memoire.change || !ctx.registre.derniere('memoire')) consigner(ctx, [{ type: 'memoire', sha256: memoire.sha256, octets: memoire.octets, n_oppositions: ctx.oppositions.size, cle: CLES.memoire(memoire.sha256) }]);
   // Fin de cycle (R-11, R-15) : caches et fiches brutes des cycles ; listes de plus de 90 jours sans pari ouvert.
   const vue = { lister: (p) => ctx.magasin.lister(p).filter((f) => /^prive\/(cycles|cache)\//.test(f)), supprimerPrive: (r) => ctx.magasin.supprimerPrive(r) };
-  garde.purgerPrive(vue, { motif: 'fin_cycle', horloge: ctx.horloge });
+  garde.purgerPrive(vue, { motif: 'fin_cycle', horloge: ctx.horloge, registre: ctx.registre });
   garde.purgerPrive(ctx.magasin, { motif: 'retention_90j', horloge: ctx.horloge, registre: ctx.registre });
   return { notification, gestes: gestes.map(({ id, geste, depuis_h }) => ({ id, geste, depuis_h })), memoire, taches_mcp: [] };
 }
@@ -1021,7 +1233,6 @@ export async function executerCycle(ctx, { jusqua = null, rever = ctx.horloge.jo
   if (jusqua !== null && !ETAPES.includes(jusqua)) throw new Error(`étape inconnue « ${jusqua} » (${ETAPES.join(', ')})`);
   const t0 = Date.now();
   ctx.etatCycle = lireEtatCycle(ctx);
-  const dernierReg = ctx.registre.derniere('cycle', (l) => l.jour === ctx.jour);
   let passage;
   if (ctx.etatCycle) {
     const d = ctx.etatCycle.passages.at(-1);
@@ -1031,8 +1242,10 @@ export async function executerCycle(ctx, { jusqua = null, rever = ctx.horloge.jo
     }
     passage = (d?.n ?? 0) + 1;
   } else {
+    // Sans cycle.json (conteneur neuf), un nouveau passage : jamais le numéro d'un passage consigné, dont l'acte cycle
+    // serait dédoublonné et la consommation perdue (R-43).
     ctx.etatCycle = { id: ctx.id, jour: ctx.jour, passages: [], actions: {}, consommes: [], jugements_vus: [] };
-    passage = dernierReg && TERMINES.includes(dernierReg.statut) ? dernierReg.passage : (dernierReg?.passage ?? 0) + 1;
+    passage = Math.max(0, ...ctx.registre.de('cycle', (l) => l.jour === ctx.jour).map((l) => Number(l.passage) || 0)) + 1;
   }
   ctx.passage = passage;
   if (passage > PLAFONDS.passages_jour) {
@@ -1049,11 +1262,15 @@ export async function executerCycle(ctx, { jusqua = null, rever = ctx.horloge.jo
   let arret = null;
   for (let k = 0; k <= fin; k++) {
     const nom = ETAPES[k], t = Date.now(), avant = reste(ctx);
-    if (arret && nom !== 'retour') { rapport.etapes.push({ nom, statut: 'saute', duree_ms: 0, requetes: 0 }); continue; }
+    // Des revues produites par des actions déjà marquées « executee » sont toujours mises en file, même après un arrêt
+    // (budget, durée) : sinon elles seraient perdues, aucun passage suivant ne rejouant une action exécutée.
+    const revuesEnSuspens = nom === 'revue' && ctx.revuesAFaire.length > 0;
+    if (arret && nom !== 'retour' && !revuesEnSuspens) { rapport.etapes.push({ nom, statut: 'saute', duree_ms: 0, requetes: 0 }); continue; }
     try {
-      ctx.budget.verifierDuree();
+      if (!revuesEnSuspens) ctx.budget.verifierDuree();
       const r = await ETAPE[nom](ctx, { rever, passage }, rapport);
       ctx.S[nom] = r.sortie;
+      if (r.statut === 'budget') rapport.statut = 'budget';
       rapport.etapes.push({ nom, statut: r.statut, duree_ms: Date.now() - t, requetes: avant.codeur + avant.sirene - ctx.budget.reste('codeur') - ctx.budget.reste('sirene') });
     } catch (e) {
       rapport.etapes.push({ nom, statut: 'echec', duree_ms: Date.now() - t, requetes: avant.codeur + avant.sirene - ctx.budget.reste('codeur') - ctx.budget.reste('sirene'), motif: tronquer(e.message, 200) });
@@ -1080,8 +1297,12 @@ export async function executerCycle(ctx, { jusqua = null, rever = ctx.horloge.jo
   ctx.etatCycle.jugements_vus = lireDemandesDe(ctx.magasin, ctx.id).filter((d) => ['accepte', 'abandonne'].includes(statuts[d.id]?.statut)).map((d) => d.id);
   ctx.etatCycle.passages.push({ n: passage, debut: new Date(t0).toISOString(), fin: ctx.horloge.iso(), statut: rapport.statut, jusqua, requetes: rapport.requetes, rapport });
   sauverEtatCycle(ctx);
-  const publicCycle = { id: ctx.id, jour: ctx.jour, passages: ctx.etatCycle.passages.map((p) => ({ passage: p.n, statut: p.statut, duree_s: p.rapport.duree_s, requetes: p.requetes,
-    verdicts: p.rapport.verdicts, jugements_en_attente: p.rapport.a_juger.length, etapes: p.rapport.etapes.map((e) => ({ etape: e.nom, statut: e.statut, duree_ms: e.duree_ms, requetes: e.requetes })) })) };
-  ecrirePublicSur(ctx, `etat/cycles/${ctx.id}.json`, publicCycle);
+  // État public du cycle : fusionné avec le fichier existant (un conteneur neuf n'a pas les passages précédents dans son
+  // cycle.json), un passage par numéro.
+  const ici = ctx.etatCycle.passages.map((p) => ({ passage: p.n, statut: p.statut, duree_s: p.rapport.duree_s, requetes: p.requetes,
+    verdicts: p.rapport.verdicts, jugements_en_attente: p.rapport.a_juger.length, etapes: p.rapport.etapes.map((e) => ({ etape: e.nom, statut: e.statut, duree_ms: e.duree_ms, requetes: e.requetes })) }));
+  const avant = lireJsonSur(ctx.magasin, `etat/cycles/${ctx.id}.json`);
+  const passages = [...(Array.isArray(avant?.passages) ? avant.passages : []).filter((p) => !ici.some((x) => x.passage === p?.passage)), ...ici].sort((a, b) => a.passage - b.passage);
+  ecrirePublicSur(ctx, `etat/cycles/${ctx.id}.json`, { id: ctx.id, jour: ctx.jour, passages });
   return rapport;
 }

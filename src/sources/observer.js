@@ -8,10 +8,11 @@
 // fichiers privés prive/cycles/<id>/annonces.json et prive/cycles/<id>/pages/<slug>.txt. Aucun acte : M12 consigne
 // observation:codeur:<jour> avec {fichier, sha256, sante, requetes, trou} et l'effectif dans mesure (la clé « n » est
 // réservée par le registre) ; voir Observation.serie.
-import { creerBudget, heuresEntre, sha256Texte, BudgetEpuise, Bloque, PubliqueRefusee } from '../socle.js';
+import { creerBudget, heuresEntre, sha256Texte, BudgetEpuise, Bloque, EchecReseau, PubliqueRefusee } from '../socle.js';
 import { CLES } from '../registre.js';
 import { BASE, lireRss, lireListe, lireProjet, lirePage, santeParseur, SEUIL_NULL } from './codeur.js';
 import { compter } from './sirene.js';
+import { classerAnnonce } from '../monde.js';
 
 export const LIMITES = Object.freeze({ details: 4, pages: 1, liste: Object.freeze([1, 2]), trou: Object.freeze([3, 4, 5]), taux_null_max: SEUIL_NULL });
 export { santeParseur };
@@ -24,11 +25,17 @@ const arrondi = (x, n = 2) => Math.round(x * 10 ** n) / 10 ** n;
 // Le slug d'une URL de projet reprend le titre de l'annonce, qui peut nommer le client : un aveu n'en garde que l'id.
 const sansSlug = (t) => String(t).replace(/(\/projects\/\d+)-[a-z0-9-]+/gi, '$1');
 
-/** Point public d'une annonce : aucun texte libre (titre, résumé, description), aucun nom. */
+/**
+ * Point public d'une annonce : aucun texte libre (titre, résumé, description), aucun nom. age_h (âge lu à ce relevé) et
+ * famille (classée sur le texte, qui ne quitte pas prive/) y sont gardés : une annonce vue seulement en liste n'a pas de
+ * pubDate, et un conteneur neuf ou MESURER doivent retrouver les mêmes âges et familles que COMPRENDRE.
+ */
 export function pointSerie(a, t) {
+  const texte = [a.titre, a.resume, a.description].some((x) => typeof x === 'string' && x.trim());
+  const famille = typeof a.famille === 'string' ? a.famille : texte || a.tags?.length ? classerAnnonce(a).famille : null;
   const p = { id: a.id, t, statut: a.statut ?? null, offres: a.offres ?? null, vues: a.vues ?? null, interactions: a.interactions ?? null,
     devis_2h_n: a.devis_2h?.n ?? null, bmin: a.budget?.min ?? null, bmax: a.budget?.max ?? null, tags: Array.isArray(a.tags) ? a.tags : [],
-    publie_le: a.publie_le ?? null };
+    publie_le: a.publie_le ?? null, age_h: typeof a.age_h === 'number' && Number.isFinite(a.age_h) ? a.age_h : null, famille };
   // Extensions : page détail lue (montant moyen des devis, fenêtre des devis), annonce suivie hors des pages lues.
   if (a.detail) Object.assign(p, { detail: true, devis_2h_h: a.devis_2h?.heures ?? null, montant_moyen_devis: a.montant_moyen_devis ?? null });
   if (a.hors_pages) p.hors_pages = true;
@@ -121,7 +128,7 @@ function unir(rss, liste, details, luLe) {
  * {jour, suivis: [{id, url, motif}], candidats: [{id, url}], pages: [{canal, chemin}], sondes: [{recette, params}],
  * derniere_vue?}. Rend une Observation {lu_le, jour, annonces, suivis, pages, sondes, trou, sante, requetes, aveux,
  * serie: {fichier, n, sha256}|null, fichier_prive}. Toute lecture refusée (budget, plafond, 403, erreur réseau) est
- * consignée dans aveux, sans jamais citer un nom ; un 403 arrête codeur.com pour le cycle.
+ * consignée dans aveux, sans jamais citer un nom ; un 403 arrête codeur.com pour le cycle, une panne (EchecReseau) pour le passage.
  */
 export async function observer(ctx, plan) {
   const { http, budget, horloge, magasin = null } = ctx;
@@ -138,6 +145,9 @@ export async function observer(ctx, plan) {
     if (arret[source]) { aveux.push({ quoi, ref, motif: `non lu : ${arret[source]}` }); return null; }
     try { return await f(); } catch (e) {
       if (e instanceof Bloque) arret[source] = `${source} a répondu HTTP 403 : source arrêtée pour le cycle`;
+      // Panne (erreur réseau, 429 ou 5xx après tous les essais) : la source est coupée pour ce passage, pour ne pas brûler
+      // le budget du jour en essais sur chaque URL ; le passage suivant garde de quoi refaire le relevé.
+      else if (e instanceof EchecReseau) arret[source] = `${source} en panne (${sansSlug(e.message)}) : source arrêtée pour ce passage, nouvel essai au lancement suivant`;
       else if (e instanceof BudgetEpuise && (e.source === source || e.source === 'duree_s')) arret[source] = e.message;
       if (e instanceof BudgetEpuise && e.source === 'duree_s') { arret.codeur ??= e.message; arret.sirene ??= e.message; }
       aveux.push({ quoi, ref, motif: sansSlug(e?.message ?? String(e)) });
@@ -258,7 +268,8 @@ export function rehydrater(magasin, registre, jour) {
   const derniers = points.filter((p) => p.t === t);
   const versAnnonce = (p) => ({
     id: p.id, url: `${BASE}/projects/${p.id}`, titre: null, statut: p.statut ?? null, publie_le: p.publie_le ?? null,
-    age_h: p.publie_le ? arrondi(Math.max(0, heuresEntre(p.publie_le, t))) : null,
+    age_h: p.publie_le ? arrondi(Math.max(0, heuresEntre(p.publie_le, t))) : typeof p.age_h === 'number' ? p.age_h : null,
+    ...(typeof p.famille === 'string' ? { famille: p.famille } : {}),
     budget: { min: p.bmin ?? null, max: p.bmax ?? null, texte: null }, offres: p.offres ?? null, vues: p.vues ?? null,
     interactions: p.interactions ?? null, devis_2h: p.devis_2h_n === null || p.devis_2h_n === undefined ? null : { n: p.devis_2h_n, heures: p.devis_2h_h ?? 2 },
     montant_moyen_devis: p.montant_moyen_devis ?? null, tags: Array.isArray(p.tags) ? p.tags : [], resume: null, description: null, lu_le: t,

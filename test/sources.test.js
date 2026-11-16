@@ -436,6 +436,18 @@ test('observer : sans trou, ni p3 ni plus ; 403 → codeur arrêté pour le cycl
   assert.ok(bloque.aveux.some((a) => a.quoi === 'sante'));
 });
 
+test('observer : panne réseau sur codeur → source coupée après la 1re URL en échec ; le budget du jour reste au passage suivant', async () => {
+  const rssItems = ids(491001, 3).map((id) => ({ id, pub: 'Sun, 15 Nov 2026 06:00:00 +0100' }));
+  const pages = { 1: pageListe(ids(491001, 3).map((id) => ({ id }))), 2: pageListe([]) };
+  const panne = (u) => (u.hostname === 'www.codeur.com' ? new TypeError('fetch failed') : monde({ rssItems, pages })(u));
+  const c = reseau(panne);
+  const obs = await observer({ jour: '2026-11-15', horloge: c.horloge, budget: c.budget, http: c.http }, { suivis: [{ id: '491001', motif: 'pari' }], pages: [{ canal: 'codeur', chemin: '/pages/cgu-codeur' }] });
+  assert.equal(obs.requetes.codeur, 4, 'les 4 essais de la première URL seulement (RSS), pas 10');
+  assert.equal(c.budget.reste('codeur'), PLAFONDS.codeur - 4);
+  assert.ok(obs.aveux.filter((a) => /non lu : codeur en panne/.test(a.motif)).length >= 3, 'liste, détail et page : non lus, consignés');
+  assert.equal(obs.sante.ok, false);
+});
+
 test('santé : HTML remanié (0 annonce) → ok = false ; 30 % d’offres illisibles → false ; 10 % → true', async () => {
   const c = reseau(monde({ rssItems: ids(491001, 3).map((id) => ({ id, pub: 'Sun, 15 Nov 2026 06:00:00 +0100' })), pages: { 1: '<main class="refonte">annonces</main>', 2: '<main></main>' } }));
   const obs = await observer({ jour: '2026-11-15', horloge: c.horloge, budget: c.budget, http: c.http }, {});
@@ -450,7 +462,9 @@ test('santé : HTML remanié (0 annonce) → ok = false ; 30 % d’offres illisi
   assert.equal(santeParseur(annonces(0), []).ok, false, 'RSS vide');
   assert.deepEqual(santeParseur([], [{}]).taux_null, { offres: null, statut: null, age_h: null });
   assert.deepEqual(Object.keys(pointSerie({ id: '1', budget: { min: 1, max: 2 }, tags: ['x'], titre: 'non', resume: 'non' }, 't')).sort(),
-    ['bmax', 'bmin', 'devis_2h_n', 'id', 'interactions', 'offres', 'publie_le', 'statut', 't', 'tags', 'vues']);
+    ['age_h', 'bmax', 'bmin', 'devis_2h_n', 'famille', 'id', 'interactions', 'offres', 'publie_le', 'statut', 't', 'tags', 'vues']);
+  const pt = pointSerie({ id: '2', age_h: 72, tags: ['Prospection commerciale'], titre: 'Constituer une liste fictive', resume: 'non' }, 't');
+  assert.deepEqual([pt.age_h, pt.famille, pt.titre, pt.resume], [72, 'donnees', undefined, undefined], 'âge lu en liste et famille gardés ; aucun texte');
   assert.equal(LIMITES.details, 4);
   assert.equal(santeParseur, santeCodeur, 'une seule définition, réexportée par observer.js');
 });
@@ -481,4 +495,31 @@ test('rehydrater : second cycle du même jour dans un conteneur neuf → 0 requ�
   const suivi = re.suivis.find((s) => s.id === '491002');
   assert.deepEqual([suivi.offres, suivi.interactions, suivi.devis_2h], [491002 % 50, 3, { n: 3, heures: 2 }]);
   assert.equal(re.annonces.find((a) => a.id === '491002').offres, 491002 % 50, 'le détail lu prime sur la liste');
+});
+
+// Échec fermé : si l'API cesse de renvoyer opposition_diffusion_commerciale ou statut_diffusion (champ retiré ou renommé),
+// la fiche n'est jamais lue « sans opposition » : null, exclue par G4 et G11, et L5 signale le champ manquant.
+test('resumer : opposition et statut_diffusion absents → null (jamais false) ; G4 exclut, L5 bloque la liste', async () => {
+  const { resumer: resumerFiche } = await import('../src/sources/sirene.js');
+  const { controlerListe, listeBloquee } = await import('../src/controles.js');
+  const brutes = JSON.parse(fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures', 'sirene', 'fiches-brutes.json'), 'utf8'));
+  const opposee = brutes.find((f) => f.opposition_diffusion_commerciale === true);
+  assert.ok(opposee, 'la fixture contient une fiche opposée');
+  const sans = brutes.map(({ opposition_diffusion_commerciale, statut_diffusion, ...reste }) => reste).map(resumerFiche);
+  assert.ok(sans.every((e) => e.opposition === null && e.statut_diffusion === null));
+  const r = controlerListe(sans, { complet: true }, { cible_taille: 'toutes' }, { oppositions: new Set() });
+  assert.equal(r.retenues.length, 0, 'aucune fiche retenue sans le champ opposition');
+  assert.ok(!r.retenues.some((e) => e.siren === opposee.siren));
+  assert.equal(r.compte.par_controle.G4, sans.length);
+  const l5 = r.resultats.find((x) => x.code === 'L5');
+  assert.equal(l5.ok, false);
+  assert.match(l5.motif, /opposition/);
+  assert.match(l5.motif, /statut_diffusion/);
+  assert.equal(listeBloquee(r.resultats), true);
+  // Champ non booléen (renommé en texte, par exemple) : null aussi, pas Boolean('non') === true ni false.
+  assert.equal(resumerFiche({ ...brutes[0], opposition_diffusion_commerciale: 'non' }).opposition, null);
+  // Témoin : champs présents → la fiche opposée est exclue, les autres sont lues telles quelles.
+  const avec = controlerListe(brutes.map(resumerFiche), { complet: true }, { cible_taille: 'toutes' }, { oppositions: new Set() });
+  assert.equal(avec.retenues.some((e) => e.siren === opposee.siren), false);
+  assert.equal(avec.resultats.find((x) => x.code === 'L5').ok, true);
 });

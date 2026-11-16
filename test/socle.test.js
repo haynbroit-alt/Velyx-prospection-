@@ -460,7 +460,7 @@ test('magasin à blanc : rien n’est écrit, lire() relit le calque, plan() lis
 test('fixtures communes : 20 fiches fictives au format Entreprise, cas imposés présents', () => {
   const L = JSON.parse(fs.readFileSync(path.join(RACINE, 'test', 'fixtures', 'commun', 'entreprises.json'), 'utf8'));
   const CHAMPS = ['siren', 'nom', 'nature_juridique', 'naf', 'creation', 'etat_administratif', 'fermee', 'categorie', 'effectif', 'effectif_code',
-    'effectif_annee', 'departement', 'commune', 'dirigeants', 'dirigeants_pm', 'finances', 'ca', 'rge', 'idcc', 'opposition', 'etablissements_ouverts', 'fiche'];
+    'effectif_annee', 'departement', 'commune', 'dirigeants', 'dirigeants_pm', 'finances', 'ca', 'rge', 'idcc', 'opposition', 'statut_diffusion', 'etablissements_ouverts', 'fiche'];
   assert.equal(L.length, 20);
   const luhn = (s) => [...s].reverse().reduce((a, c, i) => { let d = Number(c) * (i % 2 ? 2 : 1); if (d > 9) d -= 9; return a + d; }, 0) % 10 === 0;
   for (const e of L) {

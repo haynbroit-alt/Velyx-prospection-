@@ -17,19 +17,19 @@ export const CONTROLES = Object.freeze([
   def('G1', 'fiche', 'alerte', 'holding probable : NAF 64.20Z ou 70.10Z, nom HOLDING ou PARTICIPATIONS, ou CA de plus de 2 M€ pour moins de 10 salariés dans une recette « micro » → quarantaine ; CA par salarié (borne haute de la tranche) de plus de 1 M€ → drapeau ca_par_salarie_eleve, jamais pour un NAF de recette.exceptions_ratio'),
   def('G2', 'fiche', 'alerte', 'comptes de plus de 3 ans (exercice < année − 3) : aucun signal financier, fiche non complète, libellé « CA ancien (AAAA) »'),
   def('G3', 'fiche', 'bloquant', 'filiale : catégorie ETI ou GE pour une cible micro ou pme → exclue ; dirigeant personne morale → drapeau filiale_probable, quarantaine si la recette vise le dirigeant'),
-  def('G4', 'fiche', 'bloquant', 'opposition à la prospection (opposition_diffusion_commerciale ou demande reçue) → exclue, quelle que soit la recette ; non neutralisable'),
+  def('G4', 'fiche', 'bloquant', 'opposition à la prospection (opposition_diffusion_commerciale ou demande reçue), ou champ opposition absent → exclue, quelle que soit la recette ; non neutralisable'),
   def('G5', 'fiche', 'alerte', 'CA publié 0 et résultat non nul → CA « non publié » (jamais « 0 € », jamais « dormante ») ; CA 0 et résultat 0 → drapeau activite_nulle_declaree'),
   def('G6', 'fiche', 'alerte', 'effectif non daté → drapeau effectif_non_date ; effectif de plus de 3 ans → drapeau effectif_ancien'),
   def('G7', 'fiche', 'alerte', 'dirigeant de 90 ans ou plus → quarantaine (donnée probablement périmée)'),
   def('G8', 'fiche', 'alerte', 'entrepreneur individuel, ou nom qui contient un jeton de dirigeant → nom traité comme nominatif'),
   def('G9', 'fiche', 'bloquant', 'entreprise fermée (état C ou date de fermeture) → exclue'),
   def('G10', 'fiche', 'bloquant', 'doublon de SIREN → exclue'),
-  def('G11', 'fiche', 'bloquant', 'diffusion partielle (statut_diffusion « P ») → exclue ; non neutralisable'),
+  def('G11', 'fiche', 'bloquant', 'diffusion partielle (statut_diffusion « P »), ou statut de diffusion absent → exclue ; non neutralisable'),
   def('L1', 'liste', 'bloquant', 'lecture partielle (complet = false) → « au moins » obligatoire devant chaque compte'),
   def('L2', 'liste', 'bloquant', 'somme des partitions différente du total'),
   def('L3', 'liste', 'bloquant', 'échantillon de 10 (graine) revu : 2 fiches fausses ou plus → liste bloquée ; alias hors tirage → revue rejetée'),
   def('L4', 'liste', 'alerte', 'quarantaine de plus de 25 % des fiches contrôlées'),
-  def('L5', 'liste', 'bloquant', 'champ attendu absent sur plus de 5 % des fiches'),
+  def('L5', 'liste', 'bloquant', 'champ attendu absent (ou null pour opposition, statut_diffusion, siren, naf) sur plus de 5 % des fiches'),
   def('B1', 'brouillon', 'bloquant', 'nombre sans provenance : ni chiffre rempli par le moteur, ni date, ni code NAF, ni article de loi permis, ni citation « … » présente mot pour mot dans l’annonce'),
   def('B2', 'brouillon', 'bloquant', 'placeholders prix et nom absents, ou montant hors citation'),
   def('B3', 'brouillon', 'bloquant', 'ligne d’échantillon qui n’est pas « retenue »'),
@@ -105,8 +105,14 @@ export function nomNominatif(e, dict) {
   return jetonsNom(e?.nom).some((t) => propres.has(t) || dict?.jetons?.has?.(t));
 }
 
-/** G4 : opposition déclarée au registre ou reçue (garde.estExclue, recopiée ici : garde.js n'est pas encore livré). */
-export const estExclue = (e, oppositions) => e?.opposition === true || Boolean(oppositions?.has?.(String(e?.siren)));
+/**
+ * G4 : opposition déclarée au registre ou reçue. Échec fermé : seule une fiche dont opposition vaut exactement false
+ * (champ opposition_diffusion_commerciale lu) peut être retenue ; un champ absent, renommé ou illisible (null, undefined)
+ * exclut la fiche, comme une opposition.
+ */
+export const estExclue = (e, oppositions) => e?.opposition !== false || Boolean(oppositions?.has?.(String(e?.siren)));
+/** G11 : seule une fiche diffusible (statut_diffusion « O ») peut être retenue ; « P », absent ou inconnu → exclue. */
+export const diffusionNonVerifiee = (e) => e?.statut_diffusion !== 'O';
 
 // ---------------------------------------------------------------------------------------------------------------------
 // Contrôles de fiche.
@@ -154,8 +160,11 @@ export function controlerFiche(e, recette, ctx = {}) {
   // G3 filiale.
   if (['ETI', 'GE'].includes(e?.categorie) && ['micro', 'pme'].includes(r.cible_taille)) touche('G3', 'exclue', `catégorie ${e.categorie} hors cible ${r.cible_taille}`, 'filiale_groupe');
   if (Number(e?.dirigeants_pm) > 0) touche('G3', r.vise_dirigeant ? 'quarantaine' : 'drapeau', 'dirigeant personne morale', 'filiale_probable');
-  // G4 opposition (obligatoire).
-  if (estExclue(e, ctx.oppositions)) touche('G4', 'exclue', 'opposition à la prospection commerciale', 'opposition');
+  // G4 opposition (obligatoire, échec fermé sur un champ absent).
+  if (estExclue(e, ctx.oppositions)) {
+    const inconnue = e?.opposition !== true && e?.opposition !== false && !ctx.oppositions?.has?.(String(e?.siren));
+    touche('G4', 'exclue', inconnue ? 'opposition inconnue (champ opposition_diffusion_commerciale absent) : exclue, échec fermé' : 'opposition à la prospection commerciale', 'opposition');
+  }
   // G5 CA publié nul.
   if (ex && ex.annee >= an - 3 && ex.ca === 0) {
     if (Number.isFinite(ex.resultat_net) && ex.resultat_net !== 0) touche('G5', 'drapeau', 'CA publié 0 avec un résultat non nul : compte de résultat non publié', 'ca_non_publie');
@@ -172,8 +181,8 @@ export function controlerFiche(e, recette, ctx = {}) {
   if (nominatif) touche('G8', 'drapeau', 'nom traité comme nominatif', 'nom_nominatif');
   // G9 fermée.
   if (e?.fermee === true || e?.etat_administratif === 'C') touche('G9', 'exclue', 'entreprise fermée', 'fermee');
-  // G11 diffusion partielle (obligatoire).
-  if (e?.statut_diffusion === 'P') touche('G11', 'exclue', 'diffusion partielle (P)', 'diffusion_partielle');
+  // G11 diffusion partielle (obligatoire, échec fermé sur un statut absent ou inconnu).
+  if (diffusionNonVerifiee(e)) touche('G11', 'exclue', e?.statut_diffusion === 'P' ? 'diffusion partielle (P)' : 'statut de diffusion inconnu (champ statut_diffusion absent) : exclue, échec fermé', 'diffusion_partielle');
   // Règles apprises, après G1 à G11.
   for (const regle of ctx.regles ?? []) {
     const f = typeof regle === 'function' ? regle : compilerRegle(regle);
@@ -229,7 +238,9 @@ export function chargerRegles(magasin) {
 // ---------------------------------------------------------------------------------------------------------------------
 // Contrôles de liste.
 
-const CHAMPS_ATTENDUS = Object.freeze(['siren', 'naf', 'departement', 'opposition', 'fermee', 'nature_juridique', 'dirigeants_pm']);
+const CHAMPS_ATTENDUS = Object.freeze(['siren', 'naf', 'departement', 'opposition', 'statut_diffusion', 'fermee', 'nature_juridique', 'dirigeants_pm']);
+/** Champs dont null vaut absence (resumer rend null quand l'API ne donne pas le champ) : L5 les compte comme manquants. */
+const NUL_EST_ABSENT = new Set(['opposition', 'statut_diffusion', 'siren', 'naf']);
 const resultat = (code, ok, n, motif) => ({ code, gravite: GRAVITE[code], ok, n_concernes: n, motif: motif ?? MOTIF[code] });
 
 /**
@@ -271,7 +282,8 @@ export function controlerListe(fiches, lecture = {}, recette = {}, ctx = {}) {
   const tauxQ = n ? quarantaine.length / n : 0;
   resultats.push(resultat('L4', tauxQ <= 0.25, quarantaine.length, `quarantaine : ${quarantaine.length} sur ${n}`));
   // L5 : champs attendus.
-  const manquants = CHAMPS_ATTENDUS.filter((k) => n && fiches.filter((e) => e?.[k] === undefined).length / n > 0.05);
+  const absent = (e, k) => e?.[k] === undefined || (NUL_EST_ABSENT.has(k) && e?.[k] === null);
+  const manquants = CHAMPS_ATTENDUS.filter((k) => n && fiches.filter((e) => absent(e, k)).length / n > 0.05);
   resultats.push(resultat('L5', manquants.length === 0, manquants.length, manquants.length ? `champs absents sur plus de 5 % des fiches : ${manquants.join(', ')}` : 'champs attendus présents'));
   return {
     retenues, quarantaine, exclues,

@@ -8,12 +8,17 @@
 // - verrou exclusif <journal>.lock (ouvert en 'wx', périmé après 30 s, attente ≤ 5 s), relecture du disque sous verrou,
 //   écriture atomique (fichier .tmp puis renommage) : plus de fenêtre entre la lecture et l'écriture ;
 // - admission : actes du propriétaire (PROPRIETAIRE_SEUL) avec niveau de vérification, montants finis et > 0, pari
-//   existant pour envoi, reponse et cloture, issue ∈ ISSUES, clôture « caduc » seulement par velyx, aucune clé nominative.
+//   existant pour envoi, reponse, cloture et encaissement qui en cite un, issue ∈ ISSUES, clôture « caduc » seulement par velyx, aucune clé nominative.
+// - antifuite (R-10) : chaque acte passe garde.verifierActe AVANT le verrou (aucune clé nominative, aucun SIREN, SIRET,
+//   téléphone ni e-mail, aucun jeton du dictionnaire, y compris dans la clé) ; dictionnaire indisponible → texte libre
+//   refusé. Le journal est public et en ajout seul : une fuite écrite ne se retire plus sans casser verifier.
 // La fusion de deux copies du journal (Registre.fusionner) est reportée.
 import fs from 'node:fs';
+import path from 'node:path';
 import crypto from 'node:crypto';
 import { TYPES_ACTE, TYPES_ACTE_V1, PROPRIETAIRE_SEUL, AUTEURS, VERIFICATIONS, ISSUES, ISSUES_POSITIVES } from './contrats.js';
-import { avecVerrou, ecrireAtomique, sha256Texte } from './socle.js';
+import { avecVerrou, ecrireAtomique, sha256Texte, creerMagasin } from './socle.js';
+import { dictionnaire, verifierActe } from './garde.js';
 
 // Empreinte de la v1, inchangée : sha256 de JSON.stringify(corps), 16 caractères. La changer casserait la chaîne existante.
 const h = (s) => crypto.createHash('sha256').update(s).digest('hex').slice(0, 16);
@@ -143,21 +148,45 @@ function echeanceLe(echeance, dateEnvoi) {
   return /^\d{4}-\d{2}-\d{2}/.test(echeance) && Number.isFinite(t) ? new Date(t).toISOString() : null;
 }
 
+/** Racine du dépôt d'un journal : <racine>/registre/journal.jsonl → <racine> ; sinon le dossier du journal. */
+const racineDuJournal = (fichier) => {
+  const dossier = path.dirname(path.resolve(fichier));
+  return path.basename(dossier) === 'registre' ? path.dirname(dossier) : dossier;
+};
+const DICT_VIDE = Object.freeze({ jetons: new Set(), sirens: new Set(), faibles: new Set(), composes: new Set(), communes: new Set() });
+
 export class Registre {
   #index = new Map();
+  #dict;
+  #dictConstruit = undefined;
 
   /**
    * @param {string|null} fichier  journal JSONL ; null : registre en mémoire seulement (voir copie()).
-   * @param {{horloge?: {iso(): string}, verrou?: {perimeMs?: number, attenteMs?: number}}} options
+   * @param {{horloge?: {iso(): string}, verrou?: {perimeMs?: number, attenteMs?: number}, dict?: object|null|(() => object|null)}} options
+   *   dict : dictionnaire de l'antifuite (garde.dictionnaire), ou fonction qui le rend ; null : indisponible (tout texte
+   *   libre refusé). Absent : construit à la première écriture depuis le prive/ voisin du journal ; s'il ne se construit
+   *   pas (DictionnaireIncoherent), il est indisponible. Un registre en mémoire sans dict ni parent n'a aucune fiche à
+   *   protéger : dictionnaire vide, motifs structurels seulement.
    */
-  constructor(fichier, { horloge = null, verrou = {} } = {}) {
+  constructor(fichier, { horloge = null, verrou = {}, dict } = {}) {
     this.fichier = fichier ?? null;
     this.horloge = horloge;
     this.verrou = this.fichier === null ? null : `${this.fichier}.lock`;
     this.optionsVerrou = verrou;
+    this.#dict = dict;
     this.lignes = [];
     this.illisible = null;
     this.relire();
+  }
+
+  /** Dictionnaire de l'antifuite utilisé pour admettre un acte (null : indisponible). */
+  dictionnaire() {
+    if (this.#dict !== undefined) return typeof this.#dict === 'function' ? this.#dict() ?? null : this.#dict;
+    if (this.fichier === null) return DICT_VIDE;
+    if (this.#dictConstruit === undefined) {
+      try { this.#dictConstruit = dictionnaire(creerMagasin(racineDuJournal(this.fichier))); } catch { this.#dictConstruit = null; }
+    }
+    return this.#dictConstruit;
   }
 
   /** Recharge le journal depuis le disque (sans effet pour un registre en mémoire). */
@@ -188,7 +217,9 @@ export class Registre {
   }
 
   #verifierReferences(a) {
-    if (['envoi', 'reponse', 'cloture'].includes(a.type) && !this.lignes.some((l) => l.type === 'pari' && l.id === a.pari)) {
+    // Un encaissement peut être « libre » (sans pari) ; s'il cite un pari, celui-ci doit exister (seul compteur d'argent).
+    const citePari = ['envoi', 'reponse', 'cloture'].includes(a.type) || (a.type === 'encaissement' && a.pari !== undefined && a.pari !== null);
+    if (citePari && !this.lignes.some((l) => l.type === 'pari' && l.id === a.pari)) {
       throw new Error(`« ${a.type} » refusé : pari inconnu « ${a.pari} »`);
     }
     if (a.type === 'pari' && a.id !== undefined && this.lignes.some((l) => l.type === 'pari' && l.id === a.id)) {
@@ -208,6 +239,9 @@ export class Registre {
    */
   ajouter(acte) {
     const a = admettre(acte);
+    // R-10 : le registre est public ; l'antifuite passe avant le verrou, en échec fermé.
+    const v = verifierActe(a, this.dictionnaire());
+    if (!v.ok) throw new Error(`acte « ${a.type} » refusé par l’antifuite (registre public, tout ce qui nomme va dans prive/) : ${v.motifs.join(' ; ')}`);
     const faire = (texte) => {
       if (this.illisible !== null) throw new Error(`registre illisible à la ligne ${this.illisible} : réparer avant tout ajout`);
       if (a.cle !== undefined && this.#index.has(a.cle)) return { ligne: this.#index.get(a.cle), nouvelle: false };
@@ -278,7 +312,7 @@ export class Registre {
 
   /** Copie en mémoire (exécution à blanc) : mêmes lignes, ajouts jamais écrits sur le disque. */
   copie() {
-    const c = new Registre(null, { horloge: this.horloge });
+    const c = new Registre(null, { horloge: this.horloge, dict: () => this.dictionnaire() });
     c.#charger(this.lignes.map((l) => JSON.stringify(l)).join('\n'));
     return c;
   }

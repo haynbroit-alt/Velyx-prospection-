@@ -92,7 +92,8 @@ export const TYPES_ACTION = fige(['rien', 'suivre_annonce', 'lire_cgu', 'sonder'
 /**
  * Point public d'une série d'annonces (etat/series/*.jsonl), sans aucun nom de client.
  * @typedef {{id: string, t: string, statut: string|null, offres: number|null, vues: number|null, interactions: number|null,
- *   devis_2h_n: number|null, bmin: number|null, bmax: number|null, tags: string[], publie_le: string|null}} PointSerie
+ *   devis_2h_n: number|null, bmin: number|null, bmax: number|null, tags: string[], publie_le: string|null,
+ *   age_h: number|null (âge lu au relevé t, pubDate ou « il y a … » de la liste), famille: string|null (FAMILLES)}} PointSerie
  */
 
 /**
@@ -117,7 +118,8 @@ export const TYPES_ACTION = fige(['rien', 'suivre_annonce', 'lire_cgu', 'sonder'
  * @property {{annee: number, ca: number|null, resultat_net: number|null}|null} ca      finances[0]
  * @property {boolean} rge
  * @property {string[]} idcc
- * @property {boolean} opposition               opposition_diffusion_commerciale
+ * @property {boolean|null} opposition          opposition_diffusion_commerciale ; null si l'API ne la donne pas (exclue, G4)
+ * @property {string|null} statut_diffusion     'O' diffusible, 'P' partielle ; null si absent (exclue, G11)
  * @property {number|null} etablissements_ouverts
  * @property {string} fiche
  */

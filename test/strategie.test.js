@@ -7,6 +7,8 @@ import { creerHorloge, empreinte } from '../src/socle.js';
 import { Registre } from '../src/registre.js';
 import { chargerMonde } from '../src/monde.js';
 import * as S from '../src/strategie.js';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const NOW = '2026-11-18T07:00:00.000Z';
 const horloge = () => creerHorloge(NOW);
@@ -16,7 +18,10 @@ const ann = (id, extra = {}) => ({ id, statut: 'Ouvert', offres: 3, age_h: 10, t
 const opp = (id, extra = {}) => ({ annonce_id: id, famille: 'donnees', age_h: 10, offres: 3, devis_2h_n: 2, budget_affiche: '500 € à 1 000 €', recette_proche: 'courtier-fictif-btp',
   preuve_legere: true, cout_requetes: 3, canaux_possibles: ['email_direct'], client_identifiable: true, vitesse_offres_h: null, ...extra });
 const revue = (id, type, ref, extra = {}) => ({ id, type, ref, statut: 'ouverte', ouverte_le: '2026-11-17T07:00:00.000Z', expire_le: '2026-11-24T07:00:00.000Z', age_h: 24, ...extra });
-const PRETES = { 'courtier-fictif-btp': { sonde: true, echantillon: true } };
+// Échantillon prêt (D5) : il a retenu des fiches et ses fiches privées sont présentes.
+const PRETES = { 'courtier-fictif-btp': { sonde: true, echantillon: { retenues: 3, prive: true, jour: '2026-11-17', vides: 0 } } };
+// CGU codeur lues : la clause contact_hors_plateforme permet le contact (R-23). Fictif.
+const CANAUX_CGU_OK = S.calculerCanaux(null, [{ canal: 'codeur', chemin: S.CHEMINS.cgu_codeur, clauses: [{ sujet: 'contact_hors_plateforme', verdict: 'autorise' }] }]);
 // 25 annonces fictives relevées à t0, t0 + 20 h, t0 + 48 h et t0 + 80 h : 10 fermées à 48 h, 15 encore ouvertes à 80 h ;
 // 5 dépassent 5 offres dès 20 h, les autres en ont 4 à 48 h.
 const SERIES = Array.from({ length: 25 }, (_, i) => {
@@ -124,9 +129,15 @@ test('mêmes entrées → mêmes actions et mêmes clés ; chaque action est au 
     assert.ok(a.raison.length > 0 && [...a.raison].length <= 200);
     assert.ok(a.jugement === null || (typeof a.jugement.type === 'string' && a.jugement.statut === 'demande'));
   }
-  assert.ok(types(x.d).includes('rediger_brouillon'), 'client identifiable, CGU non lues mais pas interdites : e-mail direct utilisable (D2)');
-  assert.equal(x.d.find((a) => a.type === 'rediger_brouillon').params.canal, 'email_direct');
+  // R-23 : CGU codeur non lues → l'e-mail direct vers l'auteur d'une annonce codeur n'est pas utilisable ; kit de canal (D2).
+  assert.ok(!types(x.d).includes('rediger_brouillon'), 'CGU codeur non lues : aucun brouillon vers un client codeur hors de la plateforme');
+  assert.ok(types(x.d).includes('preparer_kit_canal'));
   assert.ok(types(x.d).includes('lire_cgu'), 'B08 : CGU codeur à lire');
+  // CGU lues et compatibles : e-mail direct utilisable, l'action porte client_codeur pour le Risk Agent.
+  const z = cyclePur({ canaux: CANAUX_CGU_OK });
+  const b = z.d.find((a) => a.type === 'rediger_brouillon');
+  assert.equal(b.params.canal, 'email_direct');
+  assert.equal(b.params.client_codeur, true);
 });
 
 test('2 propositions ouvertes → aucune rediger_brouillon, relance par la notification', () => {
@@ -183,9 +194,15 @@ test('encaissé nul → aucune action de dépense, même si une opportunité sem
   assert.ok(!types(d).includes('rediger_brouillon'));
   assert.ok(types(d).includes('preparer_kit_canal'));
   assert.ok(!d.some((x) => (x.type === 'rediger_brouillon' && x.params.canal === 'codeur') || x.params.montant_eur), JSON.stringify(d));
-  // Le même cas après un premier encaissement : codeur redevient utilisable (la dépense elle-même reste au Risk Agent).
-  const apres = cyclePur({ canaux, encaisse_eur: 300 });
-  assert.equal(apres.d.find((x) => x.type === 'rediger_brouillon')?.params.canal, 'codeur');
+  // Après un encaissement (déclaré en session), codeur reste une dépense : non utilisable tant que politique.json
+  // plafond_eur (0, relevé par le propriétaire seul) ne couvre pas son abonnement ; un montant porté reste écarté (D9).
+  const apres = cyclePur({ canaux, encaisse_eur: 300, etat: { propositions } });
+  assert.ok(!apres.d.some((x) => x.type === 'rediger_brouillon' && x.params.canal === 'codeur'), JSON.stringify(apres.d.map((x) => x.type)));
+  assert.ok(!apres.d.some((x) => x.params.montant_eur), 'D9 : plafond_eur 0');
+  assert.equal(S.canalUtilisable({ canaux_possibles: ['codeur'], annonce_id: '900101' }, canaux, 300), null);
+  // Plafond relevé au-delà du coût de l'abonnement (31,90 €) : codeur redevient utilisable (la dépense reste au Risk Agent).
+  const releve = cyclePur({ canaux, encaisse_eur: 300, etat: { plafond_eur: 40 } });
+  assert.equal(releve.d.find((x) => x.type === 'rediger_brouillon')?.params.canal, 'codeur');
 });
 
 test('construire_liste refusée sans issue positive, sauf régénération estimée à 60 requêtes au plus (IT : 45)', () => {
@@ -206,7 +223,7 @@ test('preuve légère d’abord : sonder, puis echantillonner, puis rédiger ; b
   assert.ok(types(sans.d).includes('sonder') && !types(sans.d).includes('rediger_brouillon'));
   const sonde = cyclePur({ recettes: { 'courtier-fictif-btp': { sonde: true } } });
   assert.ok(types(sonde.d).includes('echantillonner') && !types(sonde.d).includes('sonder'));
-  assert.ok(types(cyclePur({ recettes: PRETES }).d).includes('rediger_brouillon'));
+  assert.ok(types(cyclePur({ recettes: PRETES, canaux: CANAUX_CGU_OK }).d).includes('rediger_brouillon'));
   const vide = cyclePur({ recettes: {}, etat: { budget_reste: { codeur: 5, sirene: 0 } } });
   assert.ok(!types(vide.d).includes('sonder'));
 });
@@ -250,4 +267,74 @@ test('vitesse d’offres entre deux relevés réels ; plan d’observation du cy
   assert.equal(vendredi.jour, '2026-11-21');
   assert.deepEqual(vendredi.pages.map((p) => p.chemin), [S.CHEMINS.cgu_codeur]);
   assert.ok(vendredi.suivis.some((s) => s.id === '900702' && s.motif === 'prevision'));
+});
+
+// R-23 : l'auteur d'une annonce codeur n'est contacté hors de la plateforme que si les CGU codeur, lues et citées,
+// l'autorisent. Le propriétaire a ouvert l'e-mail direct ; les CGU codeur sont inconnues, puis interdisantes, puis compatibles.
+test('R-23 : e-mail direct ouvert mais CGU codeur non lues → aucun brouillon vers le client codeur ; drapeau client_codeur posé', async () => {
+  const risque = await import('../src/risque.js');
+  const geste = [{ type: 'geste', auteur: 'proprietaire', sujet: 'canal', valeur: 'email_direct:ouvert', n: 99 }];
+  const lues = (verdict) => [{ canal: 'codeur', chemin: S.CHEMINS.cgu_codeur, clauses: [{ sujet: 'contact_hors_plateforme', verdict }] }];
+  const inconnues = S.calculerCanaux(geste, []), interdites = S.calculerCanaux(geste, lues('interdit')), ambigues = S.calculerCanaux(geste, lues('ambigu'));
+  const permises = S.calculerCanaux(geste, lues('autorise'));
+  assert.equal(inconnues.email_direct.statut, 'ouvert');
+  for (const c of [inconnues, interdites, ambigues]) {
+    assert.deepEqual(S.canauxPour(c), [], 'codeur exclu, e-mail direct non permis');
+    assert.equal(S.canalUtilisable({ annonce_id: '900101', canaux_possibles: ['email_direct'], client_identifiable: true }, c), null);
+    const d = S.decider([{ ref: 'annonce:900101', genre: 'opportunite', type: 'donnees', rang: 1, cles: [1, 1, 0, 0, 0, 0, 3, 0, 0],
+      objet: opp('900101', { canaux_possibles: ['email_direct'] }) }], { canaux: c, horloge: horloge(), recettes: PRETES, monde: chargerMonde(null) });
+    assert.ok(!d.some((a) => a.type === 'rediger_brouillon'), c.codeur.cgu);
+  }
+  assert.deepEqual(S.canauxPour(permises), ['email_direct']);
+  const d = S.decider([{ ref: 'annonce:900101', genre: 'opportunite', type: 'donnees', rang: 1, cles: [1, 1, 0, 0, 0, 0, 3, 0, 0], objet: opp('900101') }],
+    { canaux: permises, horloge: horloge(), recettes: PRETES, monde: chargerMonde(null) });
+  const b = d.find((a) => a.type === 'rediger_brouillon');
+  assert.deepEqual([b.params.canal, b.params.client_codeur], ['email_direct', true]);
+  // Le Risk Agent tranche sur ce drapeau : interdit tant que les CGU ne sont pas « lue_compatible ».
+  const ctx = (cgu) => ({ politique: risque.chargerPolitique(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')),
+    etat: { encaisse_eur: 0, revues_ouvertes_n: 0, cycles_sans_geste: 0, oppositions_dispo: true, cgu_codeur: cgu }, budget: { reste: () => 10 } });
+  assert.deepEqual([risque.evaluer(b, ctx('inconnue')).verdict, risque.evaluer(b, ctx('inconnue')).regle], ['interdit', 'R-23']);
+  assert.equal(risque.evaluer(b, ctx('lue_interdite')).regle, 'R-23');
+  assert.equal(risque.evaluer(b, ctx('lue_compatible')).verdict, 'autorise');
+});
+
+test('D1 : préalable satisfait (statut déclaré, canal gratuit ouvert) → sa fiche encore ouverte est close, motif « satisfait »', () => {
+  const revues = [revue('R-2026-11-16-1', 'prealable', 'statut'), revue('R-2026-11-16-2', 'prealable', 'canal'), revue('R-2026-11-16-3', 'kit_canal', 'donnees')];
+  const avant = cyclePur({ revues }).d;
+  assert.ok(!types(avant).includes('invalider_revue'), 'préalables encore ouverts : les fiches restent');
+  const canaux = S.calculerCanaux([{ n: 42, type: 'geste', auteur: 'proprietaire', sujet: 'canal', valeur: 'email_direct:ouvert' }]);
+  const monde = { croyances: [{ id: 'B09', niveau: 'observee' }] };
+  const d = cyclePur({ revues, canaux, monde }).d.filter((a) => a.type === 'invalider_revue');
+  assert.deepEqual(d.map((a) => [a.ref, a.params.motif]), [['R-2026-11-16-1', 'satisfait'], ['R-2026-11-16-2', 'satisfait']], 'le kit de canal n’est pas un préalable');
+  // Le geste « statut micro » suffit, sans attendre la révision de B09 par RÉVISER.
+  const parGeste = cyclePur({ revues: revues.slice(0, 1), etat: { statut_proprietaire: 'micro' } }).d.filter((a) => a.type === 'invalider_revue');
+  assert.deepEqual(parGeste.map((a) => a.ref), ['R-2026-11-16-1']);
+  assert.ok(!cyclePur({ revues: revues.slice(0, 1), etat: { statut_proprietaire: 'aucun' } }).d.some((a) => a.type === 'invalider_revue'));
+});
+
+test('D5 : échantillon à 0 fiche retenue → aucun brouillon ; nouvel échantillon le lendemain ; recette écartée après 3 échantillons vides', () => {
+  const avec = (e) => cyclePur({ recettes: { 'courtier-fictif-btp': { sonde: true, echantillon: e } }, canaux: CANAUX_CGU_OK });
+  const duJour = avec({ retenues: 0, prive: true, jour: '2026-11-18', vides: 1 }).d;
+  assert.ok(!types(duJour).includes('rediger_brouillon'), 'aucun brouillon sur un échantillon vide');
+  assert.ok(!types(duJour).includes('echantillonner'), 'un échantillon par jour au plus');
+  const veille = avec({ retenues: 0, prive: true, jour: '2026-11-17', vides: 1 }).d;
+  assert.ok(!types(veille).includes('rediger_brouillon'));
+  assert.ok(types(veille).includes('echantillonner'), 'le lendemain : nouvel échantillon (autres pages)');
+  assert.ok(types(avec({ retenues: 4, prive: false, jour: '2026-11-18', vides: 0 }).d).includes('echantillonner'), 'fiches privées absentes (conteneur neuf) : ré-échantillonner');
+  const ecartee = avec({ retenues: 0, prive: true, jour: '2026-11-17', vides: 3 }).d;
+  assert.ok(!types(ecartee).some((t) => ['rediger_brouillon', 'echantillonner'].includes(t)), 'recette sans cible : écartée');
+  assert.ok(types(avec({ retenues: 3, prive: true, jour: '2026-11-17', vides: 0 }).d).includes('rediger_brouillon'));
+});
+
+test('D2 (courtiers) : listes prêtes et e-mail direct ouvert → rediger_brouillon courtiers-construction:<dep> ; jamais deux fois le même département', () => {
+  const ouvert = S.calculerCanaux([{ n: 50, type: 'geste', auteur: 'proprietaire', sujet: 'canal', valeur: 'email_direct:ouvert' }]);
+  const courtiers = [{ departement: '74', destinataires: 2, fiches: 10 }, { departement: '69', destinataires: 1, fiches: 0 }];
+  const de = (etat, canaux = ouvert) => S.decider([], { monde: { croyances: [{ id: 'B09', niveau: 'observee' }] }, canaux, horloge: horloge(), courtiers, ...etat })
+    .filter((a) => a.type === 'rediger_brouillon');
+  assert.deepEqual(de({}).map((a) => [a.ref, a.params.departement, a.params.canal, a.params.client_codeur]), [['courtiers-construction:74', '74', 'email_direct', undefined]],
+    'un département sans fiche btp-creations-zone n’est pas proposé ; ce ne sont pas des clients codeur');
+  assert.deepEqual(de({}, S.calculerCanaux(null)), [], 'e-mail direct non ouvert : rien');
+  assert.deepEqual(de({ revues: [revue('R-2026-11-17-1', 'proposition', 'courtiers-construction:74', { statut: 'envoyee' })] }), [], 'déjà envoyé : jamais deux fois');
+  assert.equal(de({ revues: [revue('R-2026-11-17-1', 'proposition', 'courtiers-construction:74', { statut: 'caduque' })] }).length, 1, 'une revue caduque se reprend');
+  assert.deepEqual(de({ cycles_sans_geste: 5 }), [], 'D8 : gel');
 });
