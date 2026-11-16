@@ -1,0 +1,13 @@
+# Configuration Render de VELYX (Blueprint). VELYX est en Node.js, sans dépendance : ni Python, ni Uvicorn.
+# Le serveur est en lecture seule (/sante et une page de statut) ; l'agent tourne dans la tâche planifiée.
+services:
+  - type: web
+    name: velyx
+    runtime: node
+    plan: free
+    buildCommand: npm install --no-audit --no-fund
+    startCommand: node bin/serveur.js
+    healthCheckPath: /sante
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
