@@ -1,2 +1,5 @@
 prive/
 node_modules/
+registre/*.lock
+*.tmp
+*.perime

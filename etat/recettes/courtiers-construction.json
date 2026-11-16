@@ -1,0 +1,53 @@
+{
+ "id": "courtiers-construction",
+ "annonce": null,
+ "besoin": "Acheteurs du fichier btp-creations-zone : cabinets de courtage en assurance (NAF 66.22Z) actifs dont le nom évoque la construction ; des sociétés, écrites sur leur adresse professionnelle pour un objet lié à leur métier.",
+ "params": {
+  "activite_principale": "66.22Z",
+  "etat_administratif": "A"
+ },
+ "garder": {
+  "nom_contient": [
+   "btp",
+   "construction",
+   "batiment",
+   "decennale"
+  ],
+  "exclure_natures": [
+   "1000"
+  ]
+ },
+ "cible_taille": "toutes",
+ "vise_dirigeant": false,
+ "exceptions_ratio": [],
+ "signaux": [
+  {
+   "primitive": "employeur_idcc",
+   "args": [],
+   "signal": "employeur",
+   "justification": "cabinet employeur : une équipe commerciale peut exploiter un fichier livré chaque mois"
+  },
+  {
+   "primitive": "categorie_dans",
+   "args": [
+    [
+     "PME"
+    ]
+   ],
+   "signal": "pme",
+   "court": "PME",
+   "justification": "PME au sens de l’INSEE : taille d’un cabinet qui achète un fichier plutôt que de le construire"
+  }
+ ],
+ "complet": {
+  "ca_recent": false,
+  "dirigeant_principal": false
+ },
+ "gabarit": "courtiers-construction",
+ "limites": [
+  "Recherche par nom, France entière, mesurée le 15/11/2026 : btp 15, construction 26, decennale 6 résultats ; « batiment » en renvoie 4 479 et n’est gardé qu’après filtre sur le nom.",
+  "Le registre ne donne ni e-mail ni téléphone : l’adresse professionnelle du cabinet est à trouver par le propriétaire."
+ ],
+ "auteur": "humain",
+ "statut": "active"
+}

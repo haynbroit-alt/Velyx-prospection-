@@ -1,0 +1,817 @@
+[
+  {
+    "siren": "999000012",
+    "nom": "CANARIX CONSEIL INFORMATIQUE",
+    "nature_juridique": "5499",
+    "naf": "62.02A",
+    "creation": "1997-03-14",
+    "etat_administratif": "A",
+    "fermee": false,
+    "categorie": "PME",
+    "effectif": "1-2",
+    "effectif_code": "01",
+    "effectif_annee": 2023,
+    "departement": "75",
+    "commune": "PARIS",
+    "dirigeants": [
+      {
+        "qualite": "Gérant",
+        "nom": "Zéphyrin CANARIX",
+        "annee_naissance": 1958
+      }
+    ],
+    "dirigeants_pm": 0,
+    "finances": [
+      {
+        "annee": 2025,
+        "ca": 312000,
+        "resultat_net": 41000
+      },
+      {
+        "annee": 2024,
+        "ca": 298000,
+        "resultat_net": 37000
+      }
+    ],
+    "ca": {
+      "annee": 2025,
+      "ca": 312000,
+      "resultat_net": 41000
+    },
+    "rge": false,
+    "idcc": [
+      "1486"
+    ],
+    "opposition": false,
+    "etablissements_ouverts": 1,
+    "fiche": "https://annuaire-entreprises.data.gouv.fr/entreprise/999000012"
+  },
+  {
+    "siren": "999000020",
+    "nom": "ORBITALE LOGICIELS FICTIFS",
+    "nature_juridique": "5710",
+    "naf": "62.01Z",
+    "creation": "2003-06-02",
+    "etat_administratif": "A",
+    "fermee": false,
+    "categorie": "PME",
+    "effectif": "1-2",
+    "effectif_code": "01",
+    "effectif_annee": 2022,
+    "departement": "92",
+    "commune": "NANTERRE",
+    "dirigeants": [
+      {
+        "qualite": "Président",
+        "nom": "Aurèle PSEUDOMEL",
+        "annee_naissance": 1956
+      }
+    ],
+    "dirigeants_pm": 0,
+    "finances": [
+      {
+        "annee": 2025,
+        "ca": 50000000,
+        "resultat_net": 4200000
+      }
+    ],
+    "ca": {
+      "annee": 2025,
+      "ca": 50000000,
+      "resultat_net": 4200000
+    },
+    "rge": false,
+    "idcc": [],
+    "opposition": false,
+    "etablissements_ouverts": 1,
+    "fiche": "https://annuaire-entreprises.data.gouv.fr/entreprise/999000020"
+  },
+  {
+    "siren": "999000038",
+    "nom": "ARCHIVEL SERVICES NUMERIQUES",
+    "nature_juridique": "5499",
+    "naf": "62.02A",
+    "creation": "2005-09-20",
+    "etat_administratif": "A",
+    "fermee": false,
+    "categorie": "PME",
+    "effectif": "0 salarié",
+    "effectif_code": "00",
+    "effectif_annee": 2019,
+    "departement": "92",
+    "commune": "BOULOGNE-BILLANCOURT",
+    "dirigeants": [
+      {
+        "qualite": "Gérant",
+        "nom": "Bérénice FABULET",
+        "annee_naissance": 1959
+      }
+    ],
+    "dirigeants_pm": 0,
+    "finances": [
+      {
+        "annee": 2019,
+        "ca": 410000,
+        "resultat_net": 28000
+      }
+    ],
+    "ca": {
+      "annee": 2019,
+      "ca": 410000,
+      "resultat_net": 28000
+    },
+    "rge": false,
+    "idcc": [],
+    "opposition": false,
+    "etablissements_ouverts": 1,
+    "fiche": "https://annuaire-entreprises.data.gouv.fr/entreprise/999000038"
+  },
+  {
+    "siren": "999000046",
+    "nom": "DISCRETIS INFORMATIQUE",
+    "nature_juridique": "5499",
+    "naf": "62.09Z",
+    "creation": "2001-01-15",
+    "etat_administratif": "A",
+    "fermee": false,
+    "categorie": "PME",
+    "effectif": "3-5",
+    "effectif_code": "02",
+    "effectif_annee": 2023,
+    "departement": "94",
+    "commune": "CRETEIL",
+    "dirigeants": [
+      {
+        "qualite": "Gérant",
+        "nom": "Léonce MIRAGEON",
+        "annee_naissance": 1957
+      }
+    ],
+    "dirigeants_pm": 0,
+    "finances": [
+      {
+        "annee": 2024,
+        "ca": 520000,
+        "resultat_net": 33000
+      }
+    ],
+    "ca": {
+      "annee": 2024,
+      "ca": 520000,
+      "resultat_net": 33000
+    },
+    "rge": false,
+    "idcc": [],
+    "opposition": true,
+    "etablissements_ouverts": 1,
+    "fiche": "https://annuaire-entreprises.data.gouv.fr/entreprise/999000046"
+  },
+  {
+    "siren": "999000053",
+    "nom": "DOYENNE SYSTEMES",
+    "nature_juridique": "5499",
+    "naf": "62.03Z",
+    "creation": "1979-05-30",
+    "etat_administratif": "A",
+    "fermee": false,
+    "categorie": "PME",
+    "effectif": "0 salarié",
+    "effectif_code": "00",
+    "effectif_annee": 2021,
+    "departement": "78",
+    "commune": "VERSAILLES",
+    "dirigeants": [
+      {
+        "qualite": "Gérant",
+        "nom": "Anselme CHIMERAC",
+        "annee_naissance": 1925
+      }
+    ],
+    "dirigeants_pm": 0,
+    "finances": [
+      {
+        "annee": 2024,
+        "ca": 95000,
+        "resultat_net": 8000
+      }
+    ],
+    "ca": {
+      "annee": 2024,
+      "ca": 95000,
+      "resultat_net": 8000
+    },
+    "rge": false,
+    "idcc": [],
+    "opposition": false,
+    "etablissements_ouverts": 1,
+    "fiche": "https://annuaire-entreprises.data.gouv.fr/entreprise/999000053"
+  },
+  {
+    "siren": "999000061",
+    "nom": "FICTIVAL OCTAVE",
+    "nature_juridique": "1000",
+    "naf": "62.02A",
+    "creation": "2010-02-01",
+    "etat_administratif": "A",
+    "fermee": false,
+    "categorie": "PME",
+    "effectif": "0 salarié",
+    "effectif_code": "00",
+    "effectif_annee": null,
+    "departement": "75",
+    "commune": "PARIS",
+    "dirigeants": [
+      {
+        "qualite": "Exploitant",
+        "nom": "Octave FICTIVAL",
+        "annee_naissance": 1961
+      }
+    ],
+    "dirigeants_pm": 0,
+    "finances": [],
+    "ca": null,
+    "rge": false,
+    "idcc": [],
+    "opposition": false,
+    "etablissements_ouverts": 1,
+    "fiche": "https://annuaire-entreprises.data.gouv.fr/entreprise/999000061"
+  },
+  {
+    "siren": "999000079",
+    "nom": "PROMOVAL HABITAT FICTIF",
+    "nature_juridique": "5710",
+    "naf": "41.10A",
+    "creation": "2012-04-11",
+    "etat_administratif": "A",
+    "fermee": false,
+    "categorie": "PME",
+    "effectif": "6-9",
+    "effectif_code": "03",
+    "effectif_annee": 2023,
+    "departement": "69",
+    "commune": "LYON",
+    "dirigeants": [
+      {
+        "qualite": "Président",
+        "nom": "Gaspard ONIRAL",
+        "annee_naissance": 1971
+      }
+    ],
+    "dirigeants_pm": 0,
+    "finances": [
+      {
+        "annee": 2025,
+        "ca": 15000000,
+        "resultat_net": 900000
+      },
+      {
+        "annee": 2024,
+        "ca": 12400000,
+        "resultat_net": 610000
+      }
+    ],
+    "ca": {
+      "annee": 2025,
+      "ca": 15000000,
+      "resultat_net": 900000
+    },
+    "rge": false,
+    "idcc": [
+      "1512"
+    ],
+    "opposition": false,
+    "etablissements_ouverts": 1,
+    "fiche": "https://annuaire-entreprises.data.gouv.fr/entreprise/999000079"
+  },
+  {
+    "siren": "999000087",
+    "nom": "THERMIBAT RENOVATION",
+    "nature_juridique": "5499",
+    "naf": "43.22A",
+    "creation": "2006-10-02",
+    "etat_administratif": "A",
+    "fermee": false,
+    "categorie": "PME",
+    "effectif": "10-19",
+    "effectif_code": "11",
+    "effectif_annee": 2023,
+    "departement": "38",
+    "commune": "GRENOBLE",
+    "dirigeants": [
+      {
+        "qualite": "Gérant",
+        "nom": "Hippolyte SONGERIE",
+        "annee_naissance": 1960
+      },
+      {
+        "qualite": "Co-gérant",
+        "nom": "Maëlys SONGERIE",
+        "annee_naissance": 1985
+      }
+    ],
+    "dirigeants_pm": 0,
+    "finances": [
+      {
+        "annee": 2025,
+        "ca": 2100000,
+        "resultat_net": 95000
+      }
+    ],
+    "ca": {
+      "annee": 2025,
+      "ca": 2100000,
+      "resultat_net": 95000
+    },
+    "rge": true,
+    "idcc": [
+      "1597"
+    ],
+    "opposition": false,
+    "etablissements_ouverts": 1,
+    "fiche": "https://annuaire-entreprises.data.gouv.fr/entreprise/999000087"
+  },
+  {
+    "siren": "999000095",
+    "nom": "CESSATIS INFORMATIQUE",
+    "nature_juridique": "5499",
+    "naf": "62.02A",
+    "creation": "1999-11-08",
+    "etat_administratif": "C",
+    "fermee": true,
+    "categorie": "PME",
+    "effectif": "0 salarié",
+    "effectif_code": "00",
+    "effectif_annee": 2018,
+    "departement": "75",
+    "commune": "PARIS",
+    "dirigeants": [
+      {
+        "qualite": "Gérant",
+        "nom": "Casimir FINALET",
+        "annee_naissance": 1954
+      }
+    ],
+    "dirigeants_pm": 0,
+    "finances": [
+      {
+        "annee": 2018,
+        "ca": 150000,
+        "resultat_net": 4000
+      }
+    ],
+    "ca": {
+      "annee": 2018,
+      "ca": 150000,
+      "resultat_net": 4000
+    },
+    "rge": false,
+    "idcc": [],
+    "opposition": false,
+    "etablissements_ouverts": 0,
+    "fiche": "https://annuaire-entreprises.data.gouv.fr/entreprise/999000095"
+  },
+  {
+    "siren": "999000103",
+    "nom": "GROUPELEC RHONE FICTIF",
+    "nature_juridique": "5710",
+    "naf": "43.21A",
+    "creation": "1994-03-03",
+    "etat_administratif": "A",
+    "fermee": false,
+    "categorie": "ETI",
+    "effectif": "50-99",
+    "effectif_code": "21",
+    "effectif_annee": 2023,
+    "departement": "69",
+    "commune": "VILLEURBANNE",
+    "dirigeants": [
+      {
+        "qualite": "Directeur général",
+        "nom": "Ursule TUTELAIRE",
+        "annee_naissance": 1968
+      }
+    ],
+    "dirigeants_pm": 1,
+    "finances": [
+      {
+        "annee": 2025,
+        "ca": 80000000,
+        "resultat_net": 3100000
+      }
+    ],
+    "ca": {
+      "annee": 2025,
+      "ca": 80000000,
+      "resultat_net": 3100000
+    },
+    "rge": true,
+    "idcc": [
+      "1597"
+    ],
+    "opposition": false,
+    "etablissements_ouverts": 4,
+    "fiche": "https://annuaire-entreprises.data.gouv.fr/entreprise/999000103"
+  },
+  {
+    "siren": "999000111",
+    "nom": "NOVELIA FACADES",
+    "nature_juridique": "5499",
+    "naf": "43.99C",
+    "creation": "2025-09-12",
+    "etat_administratif": "A",
+    "fermee": false,
+    "categorie": "PME",
+    "effectif": "non renseigné",
+    "effectif_code": "NN",
+    "effectif_annee": null,
+    "departement": "42",
+    "commune": "SAINT-ETIENNE",
+    "dirigeants": [
+      {
+        "qualite": "Gérant",
+        "nom": "Timéo FRAICHEUR",
+        "annee_naissance": 1994
+      }
+    ],
+    "dirigeants_pm": 0,
+    "finances": [],
+    "ca": null,
+    "rge": false,
+    "idcc": [],
+    "opposition": false,
+    "etablissements_ouverts": 1,
+    "fiche": "https://annuaire-entreprises.data.gouv.fr/entreprise/999000111"
+  },
+  {
+    "siren": "999000129",
+    "nom": "SOLEVIA ISOLATION",
+    "nature_juridique": "5710",
+    "naf": "43.29A",
+    "creation": "2026-06-03",
+    "etat_administratif": "A",
+    "fermee": false,
+    "categorie": "PME",
+    "effectif": "1-2",
+    "effectif_code": "01",
+    "effectif_annee": 2026,
+    "departement": "74",
+    "commune": "ANNECY",
+    "dirigeants": [
+      {
+        "qualite": "Président",
+        "nom": "Inès PRIMEVERE",
+        "annee_naissance": 1990
+      }
+    ],
+    "dirigeants_pm": 0,
+    "finances": [],
+    "ca": null,
+    "rge": true,
+    "idcc": [],
+    "opposition": false,
+    "etablissements_ouverts": 1,
+    "fiche": "https://annuaire-entreprises.data.gouv.fr/entreprise/999000129"
+  },
+  {
+    "siren": "999000137",
+    "nom": "CHAUFFAGES DU VALENTINOIS FICTIFS",
+    "nature_juridique": "5499",
+    "naf": "43.22B",
+    "creation": "2004-01-19",
+    "etat_administratif": "A",
+    "fermee": false,
+    "categorie": "PME",
+    "effectif": "20-49",
+    "effectif_code": "12",
+    "effectif_annee": 2020,
+    "departement": "26",
+    "commune": "VALENCE",
+    "dirigeants": [
+      {
+        "qualite": "Gérant",
+        "nom": "Marius CALORIQUE",
+        "annee_naissance": 1966
+      }
+    ],
+    "dirigeants_pm": 0,
+    "finances": [
+      {
+        "annee": 2025,
+        "ca": 4500000,
+        "resultat_net": 210000
+      },
+      {
+        "annee": 2024,
+        "ca": 4300000,
+        "resultat_net": 190000
+      },
+      {
+        "annee": 2023,
+        "ca": 4000000,
+        "resultat_net": 150000
+      }
+    ],
+    "ca": {
+      "annee": 2025,
+      "ca": 4500000,
+      "resultat_net": 210000
+    },
+    "rge": true,
+    "idcc": [
+      "1597"
+    ],
+    "opposition": false,
+    "etablissements_ouverts": 1,
+    "fiche": "https://annuaire-entreprises.data.gouv.fr/entreprise/999000137"
+  },
+  {
+    "siren": "999000145",
+    "nom": "LOGICIA SOLUTIONS",
+    "nature_juridique": "5499",
+    "naf": "62.02A",
+    "creation": "2008-07-07",
+    "etat_administratif": "A",
+    "fermee": false,
+    "categorie": "PME",
+    "effectif": "1-2",
+    "effectif_code": "01",
+    "effectif_annee": 2023,
+    "departement": "93",
+    "commune": "SAINT-DENIS",
+    "dirigeants": [
+      {
+        "qualite": "Gérant",
+        "nom": "Romuald IMAGINEL",
+        "annee_naissance": 1963
+      }
+    ],
+    "dirigeants_pm": 0,
+    "finances": [
+      {
+        "annee": 2023,
+        "ca": 180000,
+        "resultat_net": 25000
+      }
+    ],
+    "ca": {
+      "annee": 2023,
+      "ca": 180000,
+      "resultat_net": 25000
+    },
+    "rge": false,
+    "idcc": [
+      "1486"
+    ],
+    "opposition": false,
+    "etablissements_ouverts": 1,
+    "fiche": "https://annuaire-entreprises.data.gouv.fr/entreprise/999000145"
+  },
+  {
+    "siren": "999000152",
+    "nom": "JEUNEDEV STUDIO",
+    "nature_juridique": "5710",
+    "naf": "62.01Z",
+    "creation": "2015-02-16",
+    "etat_administratif": "A",
+    "fermee": false,
+    "categorie": "PME",
+    "effectif": "3-5",
+    "effectif_code": "02",
+    "effectif_annee": 2024,
+    "departement": "75",
+    "commune": "PARIS",
+    "dirigeants": [
+      {
+        "qualite": "Président",
+        "nom": "Noé SUPPOSIER",
+        "annee_naissance": 1980
+      }
+    ],
+    "dirigeants_pm": 0,
+    "finances": [
+      {
+        "annee": 2025,
+        "ca": 640000,
+        "resultat_net": 52000
+      }
+    ],
+    "ca": {
+      "annee": 2025,
+      "ca": 640000,
+      "resultat_net": 52000
+    },
+    "rge": false,
+    "idcc": [
+      "1486"
+    ],
+    "opposition": false,
+    "etablissements_ouverts": 1,
+    "fiche": "https://annuaire-entreprises.data.gouv.fr/entreprise/999000152"
+  },
+  {
+    "siren": "999000160",
+    "nom": "FICTICOURT CONSTRUCTION ASSURANCES",
+    "nature_juridique": "5710",
+    "naf": "66.22Z",
+    "creation": "2011-05-09",
+    "etat_administratif": "A",
+    "fermee": false,
+    "categorie": "PME",
+    "effectif": "3-5",
+    "effectif_code": "02",
+    "effectif_annee": 2023,
+    "departement": "69",
+    "commune": "LYON",
+    "dirigeants": [
+      {
+        "qualite": "Président",
+        "nom": "Clément ASSURIEL",
+        "annee_naissance": 1975
+      }
+    ],
+    "dirigeants_pm": 0,
+    "finances": [
+      {
+        "annee": 2025,
+        "ca": 860000,
+        "resultat_net": 120000
+      }
+    ],
+    "ca": {
+      "annee": 2025,
+      "ca": 860000,
+      "resultat_net": 120000
+    },
+    "rge": false,
+    "idcc": [
+      "2247"
+    ],
+    "opposition": false,
+    "etablissements_ouverts": 1,
+    "fiche": "https://annuaire-entreprises.data.gouv.fr/entreprise/999000160"
+  },
+  {
+    "siren": "999000178",
+    "nom": "BTP GARANTIES COURTAGE FICTIF",
+    "nature_juridique": "5499",
+    "naf": "66.22Z",
+    "creation": "2018-09-24",
+    "etat_administratif": "A",
+    "fermee": false,
+    "categorie": "PME",
+    "effectif": "1-2",
+    "effectif_code": "01",
+    "effectif_annee": 2023,
+    "departement": "38",
+    "commune": "GRENOBLE",
+    "dirigeants": [
+      {
+        "qualite": "Gérant",
+        "nom": "Sidonie DECENNIA",
+        "annee_naissance": 1982
+      }
+    ],
+    "dirigeants_pm": 0,
+    "finances": [
+      {
+        "annee": 2024,
+        "ca": 240000,
+        "resultat_net": 31000
+      }
+    ],
+    "ca": {
+      "annee": 2024,
+      "ca": 240000,
+      "resultat_net": 31000
+    },
+    "rge": false,
+    "idcc": [
+      "2247"
+    ],
+    "opposition": false,
+    "etablissements_ouverts": 1,
+    "fiche": "https://annuaire-entreprises.data.gouv.fr/entreprise/999000178"
+  },
+  {
+    "siren": "999000186",
+    "nom": "FICTIVE PARTICIPATIONS",
+    "nature_juridique": "5710",
+    "naf": "70.10Z",
+    "creation": "2009-12-01",
+    "etat_administratif": "A",
+    "fermee": false,
+    "categorie": "PME",
+    "effectif": "0 salarié",
+    "effectif_code": "00",
+    "effectif_annee": 2022,
+    "departement": "75",
+    "commune": "PARIS",
+    "dirigeants": [
+      {
+        "qualite": "Président",
+        "nom": "Aurèle PSEUDOMEL",
+        "annee_naissance": 1956
+      }
+    ],
+    "dirigeants_pm": 0,
+    "finances": [
+      {
+        "annee": 2025,
+        "ca": 3000000,
+        "resultat_net": 1800000
+      }
+    ],
+    "ca": {
+      "annee": 2025,
+      "ca": 3000000,
+      "resultat_net": 1800000
+    },
+    "rge": false,
+    "idcc": [],
+    "opposition": false,
+    "etablissements_ouverts": 1,
+    "fiche": "https://annuaire-entreprises.data.gouv.fr/entreprise/999000186"
+  },
+  {
+    "siren": "999000194",
+    "nom": "ZEROCA CONSEIL",
+    "nature_juridique": "5499",
+    "naf": "62.02A",
+    "creation": "2002-03-25",
+    "etat_administratif": "A",
+    "fermee": false,
+    "categorie": "PME",
+    "effectif": "1-2",
+    "effectif_code": "01",
+    "effectif_annee": 2023,
+    "departement": "91",
+    "commune": "EVRY-COURCOURONNES",
+    "dirigeants": [
+      {
+        "qualite": "Gérant",
+        "nom": "Prosper NULLIERE",
+        "annee_naissance": 1960
+      }
+    ],
+    "dirigeants_pm": 0,
+    "finances": [
+      {
+        "annee": 2025,
+        "ca": 0,
+        "resultat_net": 12000
+      }
+    ],
+    "ca": {
+      "annee": 2025,
+      "ca": 0,
+      "resultat_net": 12000
+    },
+    "rge": false,
+    "idcc": [],
+    "opposition": false,
+    "etablissements_ouverts": 1,
+    "fiche": "https://annuaire-entreprises.data.gouv.fr/entreprise/999000194"
+  },
+  {
+    "siren": "999000202",
+    "nom": "DORMANTE MACONNERIE",
+    "nature_juridique": "5499",
+    "naf": "43.99C",
+    "creation": "2013-08-30",
+    "etat_administratif": "A",
+    "fermee": false,
+    "categorie": "PME",
+    "effectif": "6-9",
+    "effectif_code": "03",
+    "effectif_annee": 2022,
+    "departement": "01",
+    "commune": "BOURG-EN-BRESSE",
+    "dirigeants": [
+      {
+        "qualite": "Gérant",
+        "nom": "Fulbert SOMMEILLE",
+        "annee_naissance": 1969
+      }
+    ],
+    "dirigeants_pm": 0,
+    "finances": [
+      {
+        "annee": 2025,
+        "ca": 0,
+        "resultat_net": 0
+      }
+    ],
+    "ca": {
+      "annee": 2025,
+      "ca": 0,
+      "resultat_net": 0
+    },
+    "rge": false,
+    "idcc": [
+      "1597"
+    ],
+    "opposition": false,
+    "etablissements_ouverts": 1,
+    "fiche": "https://annuaire-entreprises.data.gouv.fr/entreprise/999000202"
+  }
+]

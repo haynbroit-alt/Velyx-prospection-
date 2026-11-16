@@ -46,12 +46,20 @@ Limites consignées au registre (actes `aveu`) : lecture BTP incomplète, Bruxel
 
 **Argent encaissé : 0 €.** Aucune proposition n'est encore partie.
 
+Étude de marché sourcée (concurrents, prix payés, cadre RGPD/CNIL, canaux à 0 €) : `reports/Marché fichiers prospection à signaux.md`.
+
 ## Gestes du propriétaire (rien ne part sans lui)
 
-1. Un compte freelance sur codeur.com (l'inscription est annoncée gratuite ; la limite de réponses n'est pas connue).
-2. Relire `prive/brouillon-*.md`, fixer le prix (laissé en blanc exprès), envoyer, puis `node bin/velyx.js envoye <pari>`.
-3. Consigner l'issue (`reponse <pari> <issue>`) ; un premier paiement suppose un statut pour facturer
-   (micro-entreprise, par exemple) : c'est sa décision.
+Mandat du 15/11/2026 : **0 € avant le premier encaissement** (`politique.json`). codeur.com sert à **lire** la demande ;
+y répondre coûte au moins 31,90 € HT par 30 jours (page tarifs, lue le 15/11/2026) : exclu.
+
+1. Choisir un canal gratuit : e-mail direct depuis sa propre adresse (B2B, objet lié au métier du destinataire,
+   information et opposition), service ComeUp (publication gratuite, 20 % prélevés sur les ventes seulement) ou
+   profil Malt (commission sur les missions seulement). Voir `reports/Marché fichiers prospection à signaux.md`.
+2. Relire le brouillon préparé dans `prive/`, fixer le prix (laissé en blanc exprès), envoyer, puis
+   `node bin/velyx.js envoye <pari> --canal <canal>`.
+3. Pour encaisser : un statut immatriculé (micro-entreprise : inscription gratuite). Consigner l'issue
+   (`reponse <pari> <issue>`) et tout paiement (`encaisse <eur> <preuve>`).
 
 ## Règles
 

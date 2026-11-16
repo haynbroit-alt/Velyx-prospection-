@@ -1,0 +1,79 @@
+[
+  {
+    "siren": "999000101",
+    "nom_complet": "FICTIVORE ISOLATION",
+    "nom_raison_sociale": "FICTIVORE ISOLATION",
+    "sigle": null,
+    "nature_juridique": "5710",
+    "activite_principale": "43.29A",
+    "section_activite_principale": "F",
+    "categorie_entreprise": "PME",
+    "annee_categorie_entreprise": "2023",
+    "tranche_effectif_salarie": "03",
+    "annee_tranche_effectif_salarie": "2023",
+    "date_creation": "2025-09-12",
+    "date_fermeture": null,
+    "etat_administratif": "A",
+    "statut_diffusion": "O",
+    "opposition_diffusion_commerciale": true,
+    "nombre_etablissements": 1,
+    "nombre_etablissements_ouverts": 1,
+    "siege": {
+      "departement": "69",
+      "region": "84",
+      "libelle_commune": "LYON",
+      "adresse": "1 RUE FICTIVE 69000 LYON",
+      "code_postal": "69000",
+      "liste_rge": ["8611M10D109"],
+      "liste_idcc": ["1597"],
+      "annee_tranche_effectif_salarie": null
+    },
+    "dirigeants": [
+      { "type_dirigeant": "personne physique", "qualite": "Président de SAS", "nom": "IMAGINOR", "prenoms": "Anatole Firmin", "annee_de_naissance": "1958", "date_de_naissance": "1958-03", "nationalite": "Française" },
+      { "type_dirigeant": "personne physique", "qualite": "Commissaire aux comptes titulaire", "nom": "AUDITORIX", "prenoms": "Basile", "annee_de_naissance": "1970", "date_de_naissance": "1970-01", "nationalite": "Française" },
+      { "type_dirigeant": "personne morale", "qualite": "Commissaire aux comptes suppléant", "denomination": "CABINET FICTIF D'AUDIT", "siren": "999000119" },
+      { "type_dirigeant": "personne morale", "qualite": "Directeur Général", "denomination": "HOLDING FICTIVE", "siren": "999000127" }
+    ],
+    "finances": {
+      "2022": { "ca": 900000, "resultat_net": 20000 },
+      "2025": { "ca": 1200000, "resultat_net": 61000 },
+      "2023": { "ca": 950000, "resultat_net": -5000 },
+      "2024": { "ca": 1100000, "resultat_net": 40000 }
+    }
+  },
+  {
+    "siren": "999000135",
+    "nom_complet": "CHIMEREX CONSEIL",
+    "nature_juridique": "5499",
+    "activite_principale": "62.02A",
+    "categorie_entreprise": "PME",
+    "tranche_effectif_salarie": "01",
+    "annee_tranche_effectif_salarie": "2022",
+    "date_creation": "2001-01-15",
+    "date_fermeture": "2026-06-30",
+    "etat_administratif": "C",
+    "statut_diffusion": "P",
+    "opposition_diffusion_commerciale": false,
+    "nombre_etablissements_ouverts": 0,
+    "siege": { "departement": "94", "libelle_commune": "CRETEIL", "liste_rge": null, "liste_idcc": null },
+    "dirigeants": [
+      { "type_dirigeant": "personne physique", "qualite": "Gérant", "nom": "CHIMEREX", "prenoms": "Ludovine", "annee_de_naissance": "1961", "date_de_naissance": "1961-11", "nationalite": "Française" }
+    ],
+    "finances": null
+  },
+  {
+    "siren": "999000143",
+    "nom_complet": "PSEUDONYME EI",
+    "nature_juridique": "1000",
+    "activite_principale": "62.01Z",
+    "categorie_entreprise": null,
+    "tranche_effectif_salarie": "NN",
+    "date_creation": "2019-04-01",
+    "etat_administratif": "A",
+    "statut_diffusion": "O",
+    "opposition_diffusion_commerciale": false,
+    "siege": { "departement": "75", "libelle_commune": "PARIS" },
+    "dirigeants": [],
+    "finances": { "2024": { "ca": 45000 } }
+  }
+]

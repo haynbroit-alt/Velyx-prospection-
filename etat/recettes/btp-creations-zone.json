@@ -1,0 +1,76 @@
+{
+ "id": "btp-creations-zone",
+ "annonce": null,
+ "besoin": "Fichier des entreprises du bâtiment immatriculées récemment dans un département, vendu aux courtiers en assurance construction : la décennale doit être justifiée à l’ouverture de tout chantier (C. assurances, art. L241-1).",
+ "variables": {
+  "departement": {
+   "defaut": "69"
+  },
+  "mois": {
+   "defaut": 12
+  }
+ },
+ "params": {
+  "activite_principale": "43.99C,41.20A,41.20B,43.12A,43.12B,43.11Z,43.91A,43.91B,43.99A,43.32A,43.32B,43.31Z,43.33Z,43.34Z,43.29A,43.39Z,43.21A,43.22A,43.22B,43.29B,41.10A,42.11Z,42.21Z,71.12B",
+  "departement": {
+   "var": "departement"
+  },
+  "tranche_effectif_salarie": "NN,00,01,02,03",
+  "etat_administratif": "A"
+ },
+ "garder": {
+  "departements": [
+   {
+    "var": "departement"
+   }
+  ],
+  "creation_moins_de_mois": {
+   "var": "mois"
+  }
+ },
+ "cible_taille": "pme",
+ "vise_dirigeant": false,
+ "exceptions_ratio": [
+  "41.10A",
+  "41.20A",
+  "41.20B"
+ ],
+ "signaux": [
+  {
+   "primitive": "rge",
+   "args": [],
+   "signal": "rge",
+   "justification": "qualification RGE en colonne : travaux de rénovation énergétique, à déclarer à l’assureur"
+  },
+  {
+   "primitive": "naf_prefixe",
+   "args": [
+    [
+     "41.10",
+     "41.20"
+    ]
+   ],
+   "signal": "operation",
+   "court": "promoteur/constructeur",
+   "justification": "promoteur ou constructeur : dommages-ouvrage et tous risques chantier à chaque opération, en plus de la décennale"
+  },
+  {
+   "primitive": "employeur_idcc",
+   "args": [],
+   "signal": "employeur",
+   "justification": "convention collective déclarée : l’entreprise emploie déjà, donc ouvre des chantiers"
+  }
+ ],
+ "complet": {
+  "ca_recent": false,
+  "dirigeant_principal": true
+ },
+ "gabarit": "courtiers-construction",
+ "limites": [
+  "L’API publique ne filtre pas par date de création : le filtre est appliqué après lecture. Dans un département dense (Rhône), la requête dépasse le plafond de 10 000 résultats de l’API, même en tranche NN : la lecture reste alors partielle.",
+  "Une immatriculation récente peut être une reprise ou un transfert de siège : à vérifier sur la fiche officielle.",
+  "Le nom et la commune d’une entreprise individuelle ne figurent jamais dans un échantillon."
+ ],
+ "auteur": "humain",
+ "statut": "active"
+}

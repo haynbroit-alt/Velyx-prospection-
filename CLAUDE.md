@@ -18,3 +18,7 @@ simulation et rien encaissé. VELYX commence par le marché réel et s'y tient.
 
 ## Avant tout commit
 `npm test` et `node bin/velyx.js verifier`.
+
+## Mémoire
+Glossaire, projets et préférences : `memory/`. Tâches : `TASKS.md` (tableau de bord : `dashboard.html`).
+Le dépôt est public : aucune donnée personnelle dans `memory/` ni `TASKS.md`.
