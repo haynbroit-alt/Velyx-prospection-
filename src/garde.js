@@ -76,7 +76,7 @@ const lettres = (m) => /^[A-Z]{4,}$/.test(m);
  * avec une majuscule (« Pages lues », « Petit rappel »), ils ne comptent pas : il faut un prénom ou un nom voisin, ou
  * une civilité devant le nom. Le scan du dépôt y ajoute tout mot que le dépôt emploie en minuscules.
  */
-export const MOTS_COURANTS = Object.freeze(new Set(['PETIT', 'PETITE', 'GRAND', 'GRANDE', 'BLANC', 'BLANCHE', 'BRUN', 'BRUNE', 'ROUX',
+export const MOTS_COURANTS = Object.freeze(new Set(['SARL', 'SAS', 'GROS', 'JOUR', 'PARIS', 'LYON', 'PETIT', 'PETITE', 'GRAND', 'GRANDE', 'BLANC', 'BLANCHE', 'BRUN', 'BRUNE', 'ROUX',
   'NOIR', 'ROUGE', 'VERT', 'GRIS', 'JAUNE', 'BLEU', 'BEAU', 'BELLE', 'JOLI', 'BON', 'BONNE', 'BONNET', 'GENTIL', 'LEGER', 'FORT', 'GROS',
   'LONG', 'COURT', 'HAUT', 'JEUNE', 'VIEUX', 'NEUF', 'LIBRE', 'FRANC', 'FRANCE', 'FRANCAIS', 'PIERRE', 'ROSE', 'FLEUR', 'OLIVIER',
   'POIRIER', 'CHENE', 'BOIS', 'BUISSON', 'FONTAINE', 'RIVIERE', 'MONTAGNE', 'VALLEE', 'COTE', 'CHAMP', 'CHAMPS', 'PRAIRIE', 'JARDIN',
