@@ -1,0 +1,113 @@
+{
+ "id": "C-2026-11-16",
+ "jour": "2026-11-16",
+ "passages": [
+  {
+   "passage": 1,
+   "statut": "en_attente_jugement",
+   "duree_s": 5.2,
+   "requetes": {
+    "codeur": 4,
+    "sirene": 0
+   },
+   "verdicts": {
+    "autorise": 6,
+    "revue_humaine": 0,
+    "interdit": 0
+   },
+   "jugements_en_attente": 2,
+   "etapes": [
+    {
+     "etape": "observer",
+     "statut": "fait",
+     "duree_ms": 4776,
+     "requetes": 4
+    },
+    {
+     "etape": "comprendre",
+     "statut": "fait",
+     "duree_ms": 14,
+     "requetes": 0
+    },
+    {
+     "etape": "confronter",
+     "statut": "fait",
+     "duree_ms": 2,
+     "requetes": 0
+    },
+    {
+     "etape": "hypotheses",
+     "statut": "fait",
+     "duree_ms": 2,
+     "requetes": 0
+    },
+    {
+     "etape": "anticiper",
+     "statut": "fait",
+     "duree_ms": 9,
+     "requetes": 0
+    },
+    {
+     "etape": "prioriser",
+     "statut": "fait",
+     "duree_ms": 2,
+     "requetes": 0
+    },
+    {
+     "etape": "decider",
+     "statut": "fait",
+     "duree_ms": 16,
+     "requetes": 0
+    },
+    {
+     "etape": "simuler",
+     "statut": "fait",
+     "duree_ms": 29,
+     "requetes": 0
+    },
+    {
+     "etape": "executer",
+     "statut": "fait",
+     "duree_ms": 6,
+     "requetes": 0
+    },
+    {
+     "etape": "revue",
+     "statut": "fait",
+     "duree_ms": 11,
+     "requetes": 0
+    },
+    {
+     "etape": "mesurer",
+     "statut": "fait",
+     "duree_ms": 258,
+     "requetes": 0
+    },
+    {
+     "etape": "apprendre",
+     "statut": "fait",
+     "duree_ms": 1,
+     "requetes": 0
+    },
+    {
+     "etape": "reviser",
+     "statut": "fait",
+     "duree_ms": 9,
+     "requetes": 0
+    },
+    {
+     "etape": "rever",
+     "statut": "saute",
+     "duree_ms": 0,
+     "requetes": 0
+    },
+    {
+     "etape": "retour",
+     "statut": "fait",
+     "duree_ms": 10,
+     "requetes": 0
+    }
+   ]
+  }
+ ]
+}

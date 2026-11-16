@@ -12,6 +12,7 @@ import { CLES } from './registre.js';
 import { compilerRegle, controlerListe } from './controles.js';
 import { verifierObjetPublic } from './garde.js';
 import { revuesDe, cyclesSansGeste } from './risque.js';
+import { estDemandeCible } from './monde.js';
 
 /** Seuils d'effectif sous lesquels un KPI vaut null (« inconnu (n=k) »). */
 export const SEUILS = Object.freeze({ taux: 5, latence: 3, brier: 10, devis_2h: 20 });
@@ -30,8 +31,8 @@ export const KPI_DEFINITIONS = Object.freeze({
   taux_refus: K('valeur', 'taux', 'registre/journal.jsonl', 'Paris échus ayant reçu un refus au plus 7 j après l’envoi. Un refus ne compte jamais comme une réponse positive. Inconnu sous 5.'),
   commandes: K('valeur', 'n', 'registre/journal.jsonl', 'Paris ayant reçu une issue commande ou paye.'),
   gestes_en_attente: K('goulot', 'n', 'registre/journal.jsonl', 'Revues ouvertes (préalables, kits, propositions) et âge maximal en heures.'),
-  latence_proprietaire_h: K('goulot', 'h', 'registre/journal.jsonl', 'Médiane des heures entre la mise en revue et la validation, le rejet ou l’envoi. Inconnue sous 3 éléments.'),
-  cycles_sans_geste: K('goulot', 'n', 'registre/journal.jsonl', 'Cycles écrits depuis le dernier acte du propriétaire. À 5, nouvelles opportunités gelées (D8).'),
+  latence_proprietaire_h: K('goulot', 'h', 'registre/journal.jsonl', 'Médiane des heures entre la mise en revue et la validation, le rejet, l’envoi ou le geste qui satisfait un préalable. Inconnue sous 3 éléments.'),
+  cycles_sans_geste: K('goulot', 'n', 'registre/journal.jsonl', 'Cycles (jours de Paris ayant au moins un passage) écrits depuis le dernier acte du propriétaire. À 5, nouvelles opportunités gelées (D8).'),
   opportunites_perdues: K('goulot', 'n', 'registre/journal.jsonl', 'Revues devenues caduques avant l’envoi, par cause ; jamais en euros.'),
   exclusions_par_controle: K('instrument', 'n', 'registre/journal.jsonl', 'Fiches exclues ou en quarantaine par code de contrôle et par liste (dernier acte controle). Plus d’exclusions ne veut pas dire plus de qualité.'),
   taux_erreur_echantillon: K('instrument', 'taux', 'registre/journal.jsonl', 'Fiches jugées fausses sur fiches revues (contrôle L3, tirage à graine fixe).'),
@@ -39,7 +40,7 @@ export const KPI_DEFINITIONS = Object.freeze({
   sante_sources: K('instrument', 'taux', 'registre/journal.jsonl', 'Taux de champs nuls du parseur codeur au dernier relevé, avec le nombre d’annonces lues.'),
   cout_cycle: K('instrument', 's', 'registre/journal.jsonl', 'Durée du dernier cycle et requêtes émises, face aux plafonds.'),
   concurrence_a_l_envoi: K('instrument', 'n', 'etat/series', 'Offres de l’annonce liée à la dernière lecture avant l’envoi, puis à envoi + 7 j.'),
-  demande_cible_14j: K('instrument', 'n', 'etat/series', 'Annonces publiées depuis 14 j au plus, tag Prospection commerciale, Télémarketing ou Data entry, avec la médiane de leurs offres.'),
+  demande_cible_14j: K('instrument', 'n', 'etat/series', 'Annonces publiées depuis 14 j au plus, tag Prospection commerciale, Télémarketing ou Data entry, ou famille « données » (même définition que COMPRENDRE), avec la médiane de leurs offres.'),
   brier_previsions: K('instrument', 'brier', 'registre/journal.jsonl', 'Moyenne de (p − issue)² sur les prévisions résolues par une lecture réelle. Publiée dès 10 ; on peut être bien calibré avec 0 €.'),
   ratio_moteur: K('goulot', 'ratio', 'git log et registre', 'Commits touchant src/ sur 14 j divisés par max(envois sur 14 j, 1). Au-dessus de 5 sans envoi : constat.'),
   cycles_manques: K('instrument', 'n', 'registre/journal.jsonl', 'Jours sans acte cycle sur les 30 derniers jours (depuis la première ligne du registre).'),
@@ -84,7 +85,8 @@ export function brier(resolutions) {
   return arrondi(ok.reduce((s, r) => s + (r.p - r.issue) ** 2, 0) / ok.length);
 }
 
-const idPrevision = (l) => (typeof l.id === 'string' && l.id ? l.id : `L${l.n}`);
+// Une prévision de strategie.anticiper n'a pas d'id : sa clé (CLES.prevision) l'identifie, comme dans noterPrevisions.
+const idPrevision = (l) => (typeof l.id === 'string' && l.id ? l.id : typeof l.cle === 'string' && l.cle ? l.cle : `L${l.n}`);
 
 /**
  * Prévisions du registre et leur résolution. Une prévision {sujet (id d'annonce), mesure, op, seuil, p, horizon_h} n'est
@@ -101,7 +103,8 @@ export function resoudrePrevisions(registre, series = [], horloge = creerHorloge
     if (existantes.has(id)) { resolues.push({ prevision: id, p, issue: existantes.get(id).issue, source: existantes.get(id).source }); continue; }
     const echeance = t(l.emise_le ?? l.date) + Number(l.horizon_h) * 3.6e6;
     if (!Number.isFinite(echeance) || maintenant < echeance) { en_attente++; continue; }
-    const point = (series ?? []).filter((s) => String(s?.id) === String(l.sujet) && t(s.t) >= echeance).sort((a, b) => t(a.t) - t(b.t))[0];
+    const sujet = String(l.sujet).replace(/^annonce:/, '');
+    const point = (series ?? []).filter((s) => String(s?.id) === sujet && t(s.t) >= echeance).sort((a, b) => t(a.t) - t(b.t))[0];
     if (!point || !Object.hasOwn(point, l.mesure)) { echues_sans_lecture++; continue; }
     let vrai;
     try { vrai = evaluerOp(l.op ?? '==', point[l.mesure], l.seuil); } catch { echues_sans_lecture++; continue; }
@@ -174,8 +177,9 @@ export function mesurer({ registre, series = [], horloge = creerHorloge(), git =
   if (latences.length < SEUILS.latence) poser('latence_proprietaire_h', null, latences.length, { affichage: inconnu(latences.length), detail: { en_attente: enAttente } });
   else poser('latence_proprietaire_h', arrondi(mediane(latences), 1), latences.length, { detail: { en_attente: enAttente } });
   const csg = cyclesSansGeste(registre);
-  poser('cycles_sans_geste', csg.n, csg.n, { detail: { dernier_geste: csg.dernier_geste, gel: csg.n >= 5 } });
-  const perdues = revues.filter((r) => r.statut === 'caduque'), parCause = {};
+  poser('cycles_sans_geste', csg.n, csg.n, { detail: { dernier_geste: csg.dernier_geste, passages: csg.passages, gel: csg.n >= 5 } });
+  // Un préalable satisfait par le geste du propriétaire n'est pas une opportunité perdue : il compte dans la latence.
+  const perdues = revues.filter((r) => r.statut === 'caduque' && r.motif_caduque !== 'satisfait'), parCause = {};
   for (const r of perdues) parCause[r.motif_caduque] = (parCause[r.motif_caduque] ?? 0) + 1;
   poser('opportunites_perdues', perdues.length, perdues.length, { detail: { par_cause: parCause } });
 
@@ -236,11 +240,14 @@ export function mesurer({ registre, series = [], horloge = creerHorloge(), git =
     { affichage: suivis.length ? undefined : 'aucun envoi suivi', detail: { suivis } });
   const derniers = new Map();
   for (const p of pts) if (!derniers.has(p.id) || t(p.t) > t(derniers.get(p.id).t)) derniers.set(p.id, p);
-  const cibles = [...derniers.values()].filter((p) => Number.isFinite(t(p.publie_le)) && maintenant - t(p.publie_le) <= 14 * JOUR_MS
-    && Array.isArray(p.tags) && p.tags.some((x) => TAGS_CIBLE.includes(x)));
+  // Même définition que le fait demande_cible_14j de COMPRENDRE (monde.estDemandeCible) ; un point sans publie_le compte
+  // par l'âge lu au relevé (age_h) ; un point ancien sans aucun des deux a un âge inconnu, dit dans detail.
+  const iso = new Date(maintenant).toISOString();
+  const cibles = [...derniers.values()].filter((p) => estDemandeCible(p, iso));
+  const ageInconnu = [...derniers.values()].filter((p) => !Number.isFinite(t(p.publie_le)) && typeof p.age_h !== 'number').length;
   const medOffres = mediane(cibles.map((p) => p.offres));
   poser('demande_cible_14j', pts.length ? cibles.length : null, cibles.length,
-    { affichage: pts.length ? undefined : 'non mesuré', source: 'etat/series', detail: { offres_mediane: medOffres, n_offres: cibles.filter((p) => Number.isFinite(p.offres)).length } });
+    { affichage: pts.length ? undefined : 'non mesuré', source: 'etat/series', detail: { offres_mediane: medOffres, n_offres: cibles.filter((p) => Number.isFinite(p.offres)).length, age_inconnu: ageInconnu } });
 
   // K17 : Brier sur les seules prévisions résolues par une lecture réelle.
   const prev = resoudrePrevisions(registre, pts, horloge), b = brier(prev.resolues);

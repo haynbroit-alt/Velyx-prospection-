@@ -24,7 +24,8 @@ const H = 3.6e6, J = 24 * H;
 const pari = (id) => ({ type: 'pari', id, hypothese: 'h', geste_proprietaire: 'g', critere_succes: 's', critere_arret: 'a', echeance: 'envoi + 7 jours' });
 const envoi = (p, canal = 'email') => ({ type: 'envoi', ...PROPRIO, pari: p, canal });
 const reponse = (p, issue) => ({ type: 'reponse', ...PROPRIO, pari: p, issue });
-const cycle = (i) => ({ type: 'cycle', jour: '2026-11-16', passage: 1, etapes: ['observer'], requetes: { codeur: 3, sirene: 0 }, duree_s: 12, cle: `cycle:t:${i}` });
+// Un cycle par jour de Paris (le i-ème cycle tombe le 16 + i/11) : cyclesSansGeste compte des jours, pas des passages.
+const cycle = (i) => ({ type: 'cycle', jour: `2026-11-${16 + i}`, passage: 1, etapes: ['observer'], requetes: { codeur: 3, sirene: 0 }, duree_s: 12, cle: `cycle:t:${i}` });
 /** Registre en mémoire dont l'horloge avance à la main. */
 function banc(iso = '2026-11-10T08:00:00Z') {
   const h = creerHorloge(iso);
@@ -360,4 +361,26 @@ test('registre réel : KPI mesurables sans rien inventer (0 €, aucun envoi, in
   assert.equal(kpi.envois.valeur, 0);
   assert.equal(kpi.taux_reponse_positive_7j.affichage, 'inconnu (n=0)');
   assert.equal(verifierObjetPublic(kpi, null).ok, true);
+});
+
+// K16 : une annonce vue seulement en liste n'a pas de pubDate ; son âge lu au relevé (age_h) la fait compter, comme dans
+// le fait demande_cible_14j de COMPRENDRE (une seule définition). Annonces FICTIVES.
+test('demande_cible_14j : points sans publie_le comptés par age_h ; MESURER = COMPRENDRE sur le même relevé', async () => {
+  const { comprendre } = await import('../src/monde.js');
+  const { pointSerie } = await import('../src/sources/observer.js');
+  const lu_le = '2026-11-16T07:00:00.000Z', { h, registre } = banc(lu_le);
+  const A = (id, tags, extra) => ({ id, statut: 'Ouvert', offres: Number(id.slice(-1)), tags, titre: `Annonce fictive ${id}`, resume: '', ...extra });
+  const annonces = [A('900001', ['Prospection commerciale'], { publie_le: '2026-11-15T07:00:00.000Z', age_h: 24 }),
+    A('900002', ['Télémarketing'], { publie_le: null, age_h: 72 }), A('900003', ['Data entry'], { publie_le: null, age_h: 96 }),
+    A('900004', [], { publie_le: null, age_h: 5, titre: 'Constituer un fichier fictif d’entreprises' }), A('900005', ['Prospection commerciale'], { publie_le: null, age_h: 400 }),
+    A('900006', ['WordPress'], { publie_le: null, age_h: 3 })];
+  const { faits } = comprendre({ lu_le, jour: '2026-11-16', sante: { ok: true, n: 6, rss_n: 1 }, annonces, suivis: [], pages: [], sondes: [] }, {});
+  const fait = faits.find((f) => f.sujet === 'demande_cible_14j' && f.mesure === 'annonces').valeur;
+  assert.equal(fait, 4, '900001 à 900004 ; 900005 a plus de 14 j ; 900006 hors cible');
+  const series = annonces.map((a) => pointSerie(a, lu_le));
+  assert.equal(series.filter((p) => !p.publie_le).length, 5);
+  h.avancer(H);
+  const { kpi } = mesurer({ registre, horloge: h, series });
+  assert.equal(kpi.demande_cible_14j.valeur, fait, 'MESURER publie le même nombre que COMPRENDRE');
+  assert.equal(kpi.demande_cible_14j.detail.offres_mediane, 2.5);
 });

@@ -2,7 +2,8 @@
 // (recherche-entreprises.api.gouv.fr, gratuite, sans clé, ~7 requêtes/s ; la porte réseau du socle reste sous 4 req/s).
 // http injecté (socle.creerHttp) : liste blanche, budget, reprises. Trois lectures :
 // - compter : 1 requête (per_page=1) ;
-// - echantillonPages : k pages tirées sans remise par un PRNG à graine (même graine, mêmes pages) ;
+// - echantillonPages : k pages tirées sans remise par un PRNG à graine (même graine, mêmes pages) ; echantillonRecherches,
+//   la même chose sur l'union de plusieurs recherches (recette par nom), chaque page lue dans sa propre recherche ;
 // - chercher : lecture complète, coût estimé AVANT la première page (BudgetEpuise sinon), partition par département
 //   seulement au plafond de 10 000 résultats de l'API (au-delà de la page 400, l'API répond HTTP 400), reprenable.
 // Les fiches brutes nomment des personnes : elles ne quittent jamais prive/. resumer() n'en garde que le nécessaire.
@@ -92,13 +93,17 @@ function prng(graine) {
   };
 }
 
-/** k numéros de page tirés sans remise parmi 1..min(totalPages, 400), triés ; même graine, mêmes pages. */
-export function tirerPages(totalPages, k, graine) {
-  const n = Math.min(Math.max(0, Math.trunc(totalPages) || 0), PAGES_MAX);
+/** k rangs tirés sans remise parmi 1..n, triés (mélange partiel à graine, sans remise). */
+function tirer(n, k, graine) {
   if (graine === undefined || graine === null || graine === '') throw new TypeError('tirerPages : graine requise (tirage reproductible)');
   const pool = Array.from({ length: n }, (_, i) => i + 1), alea = prng(graine), m = Math.min(Math.max(0, Math.trunc(k) || 0), n);
   for (let i = 0; i < m; i++) { const j = i + Math.floor(alea() * (n - i)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
   return pool.slice(0, m).sort((x, y) => x - y);
+}
+
+/** k numéros de page tirés sans remise parmi 1..min(totalPages, 400), triés ; même graine, mêmes pages. */
+export function tirerPages(totalPages, k, graine) {
+  return tirer(Math.min(Math.max(0, Math.trunc(totalPages) || 0), PAGES_MAX), k, graine);
 }
 
 /**
@@ -117,6 +122,32 @@ export async function echantillonPages(http, params, { k = 2, graine, total_page
     total = r.total; lu_le ??= r.lu_le;
   }
   return { fiches, pages, total: total ?? 0, lu_le };
+}
+
+/**
+ * Échantillon d'une recette à plusieurs recherches (recherche par nom : une requête par mot) : la population tirée est
+ * celle que la sonde a comptée, l'union des recherches. k pages sont tirées sans remise parmi toutes leurs pages, chacune
+ * lue dans SA recherche avec un numéro calculé sur SON total (jamais les paramètres communs sans « q »). totaux : total de
+ * chaque recherche, dans l'ordre (sonde) ; s'il en manque un, un compter() par recherche est fait d'abord. Fiches
+ * dédoublonnées par SIREN (une société peut répondre à deux mots).
+ * → {fiches, pages: rangs tirés dans la population, tirage: [{q, page}], total: somme des totaux, totaux, lu_le}
+ */
+export async function echantillonRecherches(http, recherches, { k = 2, graine, totaux } = {}) {
+  const ps = (Array.isArray(recherches) ? recherches : []).map(verifierParams);
+  if (!ps.length) throw new TypeError('echantillonRecherches : au moins une recherche attendue');
+  if (graine === undefined || graine === null || graine === '') throw new TypeError('echantillonRecherches : graine requise (tirage reproductible)');
+  let tot = Array.isArray(totaux) && totaux.length === ps.length && totaux.every((x) => Number.isFinite(x) && x >= 0) ? [...totaux] : null, lu_le = null;
+  if (!tot) { tot = []; for (const p of ps) { const c = await compter(http, p); tot.push(c.total); lu_le ??= c.lu_le; } }
+  const pagesDe = tot.map((t) => Math.min(Math.ceil(t / PAR_PAGE), PAGES_MAX));
+  const rangs = tirer(pagesDe.reduce((a, b) => a + b, 0), k, graine);
+  const tirage = rangs.map((r) => { let i = 0, n = r; while (n > pagesDe[i]) { n -= pagesDe[i]; i++; } return { i, page: n }; });
+  const vus = new Set(), fiches = [];
+  for (const t of tirage) {
+    const r = await lirePage(http, ps[t.i], t.page);
+    for (const f of r.results) { if (f?.siren && vus.has(f.siren)) continue; if (f?.siren) vus.add(f.siren); fiches.push(f); }
+    lu_le ??= r.lu_le;
+  }
+  return { fiches, pages: rangs, tirage: tirage.map((t) => ({ q: ps[t.i].q ?? null, page: t.page })), total: tot.reduce((a, b) => a + b, 0), totaux: tot, lu_le };
 }
 
 /** Départements d'une requête : ceux qu'elle nomme, sinon ceux de sa région, sinon tous. */
@@ -209,8 +240,8 @@ const CAC = /commissaire/i;
 const nombre = (x) => (x === null || x === undefined || x === '' || !Number.isFinite(Number(x)) ? null : Number(x));
 
 /**
- * Fiche brute → Entreprise (contrats.js), plus statut_diffusion ('O' diffusible, 'P' partiellement diffusible).
- * Garde opposition (= opposition_diffusion_commerciale), nature juridique, état administratif, fermeture, dirigeants
+ * Fiche brute → Entreprise (contrats.js), plus statut_diffusion ('O' diffusible, 'P' partiellement diffusible ; null si
+ * l'API ne le donne pas). Garde opposition (= opposition_diffusion_commerciale si c'est un booléen, sinon null), nature juridique, état administratif, fermeture, dirigeants
  * personnes physiques (premier prénom, nom, année de naissance), nombre de dirigeants personnes morales, 3 exercices au
  * plus (du plus récent), IDCC, code de tranche d'effectif. Ne garde jamais date_de_naissance ni nationalite, ni
  * l'adresse ; écarte toujours les commissaires aux comptes (personnes physiques ou morales).
@@ -238,7 +269,10 @@ export function resumer(f) {
     dirigeants_pm: tous.filter((d) => d.type_dirigeant === 'personne morale').length,
     finances, ca: finances[0] ?? null,
     rge: Boolean(s.liste_rge?.length), idcc: Array.isArray(s.liste_idcc) ? s.liste_idcc : [],
-    opposition: Boolean(f.opposition_diffusion_commerciale), statut_diffusion: f.statut_diffusion ?? null,
+    // Valeurs brutes, jamais converties : un champ absent ou renommé par l'API vaut null, et null n'est jamais une absence
+    // d'opposition (G4 et G11 l'excluent, L5 le compte comme manquant : échec fermé).
+    opposition: typeof f.opposition_diffusion_commerciale === 'boolean' ? f.opposition_diffusion_commerciale : null,
+    statut_diffusion: typeof f.statut_diffusion === 'string' && f.statut_diffusion ? f.statut_diffusion : null,
     etablissements_ouverts: f.nombre_etablissements_ouverts ?? null,
     fiche: `https://annuaire-entreprises.data.gouv.fr/entreprise/${f.siren}`,
   };

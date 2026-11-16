@@ -86,6 +86,27 @@ test('classerAnnonce : « constituer une base de 150 entreprises du BTP » → d
   for (const x of [d, faux]) assert.ok(FAMILLES.includes(x.famille));
 });
 
+// Textes et tags des annonces réelles 492760 et 474741 du 16/11/2026 (nom du client retiré) : un mot ambigu (« collecte »,
+// « identifier ») ne fait pas d'une annonce de rendez-vous ou de recrutement commercial une demande de données.
+test('classerAnnonce : le tag Télémarketing et « rendez-vous » priment sur un mot ambigu ; égalité → rdv_appels', () => {
+  const r492760 = M.classerAnnonce({ titre: 'Partenaire commercial pour vendre un SaaS aux collectivités', tags: ['Prospection commerciale', 'Télémarketing', 'SaaS'],
+    resume: 'Nous cherchons un ou plusieurs partenaires commerciaux indépendants pour ouvrir des rendez-vous auprès des collectivités compétentes en déchets : EPCI et syndicats de collecte.' });
+  assert.equal(r492760.famille, 'rdv_appels', JSON.stringify(r492760));
+  assert.ok(!r492760.motifs.includes('collecte'), '« syndicats de collecte » n’est pas une collecte de données');
+  const r474741 = M.classerAnnonce({ titre: 'Recherche Commercial pour mon organisme de Formation', tags: ['Prospection commerciale', 'Formation', 'Marketing'],
+    resume: 'Missions : - Prospecter de nouveaux clients (entreprises et particuliers) - Assurer le suivi commercial jusqu’à la signature des conventions - Identifier les besoins en formation' });
+  assert.notEqual(r474741.famille, 'donnees', JSON.stringify(r474741));
+  assert.equal(M.classerAnnonce({ titre: 'Prise de rendez-vous à partir de votre fichier', tags: ['Prospection commerciale'] }).famille, 'rdv_appels', 'égalité (1 contre 1) → rdv_appels');
+  assert.equal(M.classerAnnonce({ titre: 'Collecte de données sur des entreprises fictives', tags: ['Prospection commerciale'] }).famille, 'donnees');
+  assert.equal(M.classerAnnonce({ titre: 'Identifier des entreprises du bâtiment fictives', tags: [] }).famille, 'donnees');
+  // Part « données » des annonces de prospection : 0 sur ces deux annonces, et non 1 sur 2.
+  const lu_le = '2026-11-16T07:00:00.000Z';
+  const { faits } = M.comprendre({ lu_le, jour: '2026-11-16', sante: { ok: true, n: 2, rss_n: 2 }, pages: [], sondes: [], suivis: [],
+    annonces: [{ id: '900760', statut: 'Ouvert', offres: 2, age_h: 96, tags: ['Prospection commerciale', 'Télémarketing'], titre: 'Partenaire commercial fictif', resume: 'ouvrir des rendez-vous auprès des syndicats de collecte' },
+      { id: '900741', statut: 'Ouvert', offres: 4, age_h: 100, tags: ['Prospection commerciale'], titre: 'Recherche commercial fictif', resume: 'Identifier les besoins en formation' }] }, { monde: monde0() });
+  assert.equal(faits.find((f) => f.sujet === 'segment:prospection' && f.mesure === 'part_donnees_28j').valeur, 0);
+});
+
 test('parseur en panne (sante.ok = false) : aucun fait agrégé ; la contradiction ne donne que artefact_mesure, sans révision', () => {
   const obs = { lu_le: '2026-11-16T07:00:00.000Z', jour: '2026-11-16', sante: { ok: false, n: 0, rss_n: 12 },
     annonces: [{ id: '900001', statut: 'Ouvert', offres: 3, tags: ['Prospection commerciale'], titre: 'Liste fictive', age_h: 5 }], suivis: [], pages: [], sondes: [] };

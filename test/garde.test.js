@@ -264,6 +264,24 @@ test('purgerPrive(fin_cycle) supprime *.brut.json et cache/, garde memoire.json 
   assert.throws(() => purgerPrive(m, { motif: 'inconnu' }), TypeError);
 });
 
+test('purgerPrive(fin_cycle) : la reprise SIRENE du jour est gardée tant que sa liste n’est pas consignée ; sinon, ou le lendemain, purgée', () => {
+  const r = dossier(), m = creerMagasin(r), h = creerHorloge('2026-11-17T10:00:00Z');
+  const fichiers = ['prive/cycles/C-2026-11-17/cache/reprise-btp-creations-zone.json', 'prive/cycles/C-2026-11-17/cache/autre.json',
+    'prive/cycles/C-2026-11-16/cache/reprise-btp-creations-zone.json', 'prive/cache/cibler-courtiers-construction-2026-11-17.json', 'prive/cache/sirene-p1.json'];
+  for (const f of fichiers) ecrire(r, f, '{}');
+  const reg = new Registre(null, { horloge: h });
+  const a = purgerPrive(m, { motif: 'fin_cycle', horloge: h, registre: reg });
+  assert.ok(m.existe('prive/cycles/C-2026-11-17/cache/reprise-btp-creations-zone.json'), 'lecture du jour interrompue : reprise gardée');
+  assert.ok(m.existe('prive/cache/cibler-courtiers-construction-2026-11-17.json'));
+  assert.deepEqual(a.supprimes.sort(), ['prive/cache/sirene-p1.json', 'prive/cycles/C-2026-11-16/cache/', 'prive/cycles/C-2026-11-17/cache/autre.json']);
+  reg.ajouter({ type: 'cible', recette: 'btp-creations-zone', compte: { retenues: 3 }, fichier_prive: 'prive/listes/btp-creations-zone-2026-11-17.json', v2: true });
+  purgerPrive(m, { motif: 'fin_cycle', horloge: h, registre: reg });
+  assert.ok(!m.existe('prive/cycles/C-2026-11-17/cache/reprise-btp-creations-zone.json'), 'liste consignée : reprise purgée');
+  assert.ok(m.existe('prive/cache/cibler-courtiers-construction-2026-11-17.json'), 'autre recette : encore gardée');
+  purgerPrive(m, { motif: 'fin_cycle', horloge: creerHorloge('2026-11-18T10:00:00Z'), registre: reg });
+  assert.ok(!m.existe('prive/cache/cibler-courtiers-construction-2026-11-17.json'), 'le lendemain : jamais relue, purgée');
+});
+
 test('purgerPrive(retention_90j) : listes de plus de 90 jours sans pari ouvert supprimées', () => {
   const r = dossier(), m = creerMagasin(r), h = creerHorloge('2026-11-15T12:00:00Z');
   for (const f of ['prive/listes/vieille-2026-07-01.json', 'prive/listes/suivie-2026-07-01.json', 'prive/listes/recente-2026-11-01.json', 'prive/memoire.json']) ecrire(r, f, '[]');
@@ -281,4 +299,23 @@ test('à blanc : la purge ne touche pas le disque', () => {
   assert.deepEqual(purgerPrive(calque, { motif: 'fin_cycle' }).supprimes, ['prive/a.brut.json']);
   assert.ok(fs.existsSync(path.join(r, 'prive/a.brut.json')));
   assert.equal(calque.existe('prive/a.brut.json'), false);
+});
+
+// Le scan du dépôt voit tout ce qu'un commit pourrait emporter : suivis, et non suivis non ignorés (avant « git add »).
+test('scannerDepot dans un dépôt git : un fichier non suivi (fixture nouvelle) qui nomme le canari est signalé ; prive/ et les ignorés non', async () => {
+  const { execFileSync } = await import('node:child_process');
+  const r = dossier();
+  try { execFileSync('git', ['init', '-q', r], { stdio: 'ignore' }); } catch { return; }   // git absent : rien à vérifier ici
+  ecrire(r, '.gitignore', 'prive/\n*.tmp\n');
+  ecrire(r, 'prive/listes/fictive-2026-11-16.json', JSON.stringify({ cibles: ENTREPRISES }));
+  ecrire(r, 'README.md', 'Dépôt fictif.\n');
+  execFileSync('git', ['-C', r, 'add', 'README.md', '.gitignore'], { stdio: 'ignore' });
+  ecrire(r, 'test/fixtures/nouvelle.json', JSON.stringify({ contact: CANARI }));          // non suivi, non ignoré
+  ecrire(r, 'brouillon.tmp', `contact : ${CANARI}\n`);                                   // ignoré : jamais commité
+  const dict = dictionnaire(creerMagasin(r));
+  const s = scannerDepot(r, dict);
+  assert.equal(s.ok, false);
+  assert.ok(s.fuites.some((f) => f.fichier === 'test/fixtures/nouvelle.json' && f.motif === 'dictionnaire'), JSON.stringify(s.fuites));
+  assert.ok(!s.fuites.some((f) => f.fichier.startsWith('prive/') || f.fichier === 'brouillon.tmp'));
+  assert.ok(!JSON.stringify(s).includes(NOM_CANARI), 'la sortie ne contient pas le nom');
 });

@@ -31,7 +31,8 @@ test('le journal réel passe verifier() après extension, mandat de la ligne 14 
   fs.copyFileSync(JOURNAL_REEL, f);
   const r = new Registre(f, { horloge: creerHorloge('2026-11-16T05:41:00Z') });
   const n = r.lignes.length;
-  const l = r.ajouter({ type: 'cycle', cle: CLES.cycle('2026-11-16', 1), jour: '2026-11-16', passage: 1, etapes: [], requetes: { codeur: 0, sirene: 0 }, duree_s: 0 });
+  // Clé absente du journal réel, quel que soit le nombre de cycles déjà consignés (un acte de même clé serait rendu tel quel).
+  const l = r.ajouter({ type: 'cycle', cle: CLES.cycle('2099-01-01', 1), jour: '2099-01-01', passage: 1, etapes: [], requetes: { codeur: 0, sirene: 0 }, duree_s: 0 });
   assert.equal(l.n, n + 1);
   assert.equal(l.precedente, r.lignes[n - 1].empreinte);
   assert.equal(l.date, '2026-11-16T05:41:00.000Z');
@@ -240,4 +241,80 @@ test('journal abîmé : verifier() le signale, ajouter() refuse ; écriture atom
 
 test('fusionner : reporté', () => {
   assert.throws(() => Registre.fusionner([], []), /reporté/);
+});
+
+// ---------------------------------------------------------------------------------------------------------------------
+// R-10 : antifuite à l'écriture du registre public (en ajout seul : une fuite écrite ne se retire plus).
+// Données FICTIVES : test/fixtures/commun/entreprises.json, canari « Zéphyrin CANARIX ».
+
+import * as garde from '../src/garde.js';
+import { appliquerGeste, mettreEnRevue } from '../src/risque.js';
+import { creerMagasin } from '../src/socle.js';
+
+const ENTREPRISES = JSON.parse(fs.readFileSync(path.join(RACINE, 'test', 'fixtures', 'commun', 'entreprises.json'), 'utf8'));
+function racineAvecListe() {
+  const r = fs.mkdtempSync(path.join(os.tmpdir(), 'velyx-reg-r10-'));
+  fs.mkdirSync(path.join(r, 'prive', 'listes'), { recursive: true });
+  fs.mkdirSync(path.join(r, 'registre'));
+  fs.writeFileSync(path.join(r, 'prive', 'listes', 'fictive-2026-11-16.json'), JSON.stringify({ cibles: ENTREPRISES }));
+  return r;
+}
+const EI = ENTREPRISES.find((e) => e.nature_juridique === '1000') ?? ENTREPRISES[0];
+// Motifs assemblés à l'exécution : le scan du dépôt (velyx garde) ne doit pas les voir dans ce fichier.
+const TEL = ['06 12', '34 56 78'].join(' '), MEL = ['z.contact', 'exemple.fr'].join('@');
+
+test('R-10 : un acte dont une valeur nomme un dirigeant, porte un téléphone, un e-mail ou un SIREN est refusé avant le verrou', () => {
+  const r = racineAvecListe(), f = path.join(r, 'registre', 'journal.jsonl');
+  const reg = new Registre(f, { horloge: creerHorloge('2026-11-16T08:00:00Z') });   // dictionnaire construit depuis prive/
+  reg.ajouter({ type: 'aveu', motif: 'registre fictif de test' });
+  const avant = fs.readFileSync(f, 'utf8');
+  const refuse = (acte, re) => assert.throws(() => reg.ajouter(acte), re);
+  refuse({ type: 'aveu', motif: 'le gérant M. Canarix a déjà un fournisseur' }, /antifuite.*jeton du dictionnaire/);
+  refuse({ type: 'aveu', motif: 'contact : Zéphyrin CANARIX' }, /jeton du dictionnaire/);
+  refuse({ type: 'aveu', motif: `rappeler au ${TEL}` }, /motif telephone/);
+  refuse({ type: 'aveu', motif: `écrire à ${MEL}` }, /motif email/);
+  refuse({ type: 'aveu', motif: `entreprise individuelle ${EI.siren}` }, /siren|jeton du dictionnaire/);
+  refuse({ type: 'hypothese', contradiction: 'K-1', type_hyp: 'instrument', test: { action: 'relire', cout_requetes: 1 }, pourquoi: `le gérant M. Canarix (${TEL})` }, /antifuite/);
+  refuse({ type: 'aveu', motif: 'clé nominative', cle: 'aveu:Zéphyrin CANARIX' }, /jeton du dictionnaire \(cle\)/);
+  assert.equal(fs.readFileSync(f, 'utf8'), avant, 'rien n’est écrit');
+  // Un acte sans donnée nominative passe ; l'encaissement garde son champ « preuve » (exigé depuis la v1), scanné.
+  assert.equal(reg.ajouter({ type: 'aveu', motif: 'lecture partielle, au moins 12 fiches' }).n, 2);
+  assert.equal(reg.ajouter({ type: 'encaissement', ...PROPRIO, montant_eur: 10, preuve: 'déclaration du propriétaire en session' }).n, 3);
+  refuse({ type: 'encaissement', ...PROPRIO, montant_eur: 10, preuve: 'virement de M. Canarix' }, /jeton du dictionnaire/);
+  assert.equal(reg.verifier().ok, true);
+});
+
+test('R-10 : un geste « rejette » ou « valide … <choix> » qui nomme une personne est refusé, et sa phrase n’est pas gardée', () => {
+  const r = racineAvecListe(), f = path.join(r, 'registre', 'journal.jsonl'), h = creerHorloge('2026-11-16T08:00:00Z');
+  const reg = new Registre(f, { horloge: h }), magasin = creerMagasin(r);
+  reg.ajouter({ type: 'revue', id: 'R-2026-11-16-1', type_revue: 'proposition', empreinte_revue: 'a'.repeat(16), geste: 'relire', fichier_prive: 'prive/revues/R-2026-11-16-1.md', expire_le: '2026-11-23T08:00:00Z' });
+  const avant = fs.readFileSync(f, 'utf8');
+  assert.throws(() => appliquerGeste('rejette R-2026-11-16-1 Zéphyrin Canarix a déjà un fournisseur', { registre: reg, horloge: h, magasin }), /antifuite/);
+  assert.equal(fs.readFileSync(f, 'utf8'), avant);
+  assert.equal(magasin.lire('prive/gestes.jsonl'), null, 'la phrase refusée n’est pas consignée');
+  assert.equal(appliquerGeste('rejette R-2026-11-16-1 a déjà un fournisseur', { registre: reg, horloge: h, magasin }).actes.length, 1);
+  // « valide R-…#empreinte <choix> » : le choix libre (80 caractères) suit le même chemin.
+  const { revue } = mettreEnRevue({ type: 'prealable', ref: 'statut', texte: 'Fiche de préalable fictive.', geste: 'lire la fiche' }, { registre: reg, horloge: h, magasin });
+  const n = reg.lignes.length;
+  assert.throws(() => appliquerGeste(`valide ${revue.id}#${revue.empreinte.slice(0, 6)} pour Zéphyrin Canarix`, { registre: reg, horloge: h, magasin }), /antifuite/);
+  assert.equal(reg.lignes.length, n);
+  assert.equal(appliquerGeste(`valide ${revue.id}#${revue.empreinte.slice(0, 6)} micro`, { registre: reg, horloge: h, magasin }).actes[0].choix, 'micro');
+});
+
+test('R-10 : dictionnaire indisponible (null) → texte libre refusé hors des actes du moteur ; dictionnaire injecté et copie héritée', () => {
+  const f = journal(), h = creerHorloge('2026-11-16T08:00:00Z');
+  const sans = new Registre(f, { horloge: h, dict: null });
+  assert.throws(() => sans.ajouter({ type: 'aveu', motif: 'texte quelconque' }), /sans dictionnaire.*échec fermé/);
+  assert.throws(() => sans.ajouter({ type: 'geste', ...PROPRIO, sujet: 'rejet', valeur: 'R-2026-11-16-1', motif: 'déjà équipé' }), /sans dictionnaire/);
+  // Les actes du moteur (décision, cycle) et ceux sans texte libre restent admis : plafonds et traces du cycle tiennent.
+  assert.ok(sans.ajouter({ type: 'decision', action: 'rien', verdict: 'autorise', regle: 'R-09', motif: 'aucune action' }));
+  assert.ok(sans.ajouter({ type: 'cycle', jour: '2026-11-16', passage: 1, etapes: [], requetes: { codeur: 0, sirene: 0 }, duree_s: 0 }));
+  assert.ok(sans.ajouter({ type: 'encaissement', ...PROPRIO, montant_eur: 1, preuve: 'déclaration' }));
+  assert.throws(() => sans.ajouter({ type: 'aveu', motif: `appeler le ${TEL}` }), /motif telephone/);
+  // Dictionnaire injecté (garde.dictionnaire) ; la copie à blanc applique le même.
+  const r = racineAvecListe(), dict = garde.dictionnaire(creerMagasin(r));
+  const avec = new Registre(journal(), { horloge: h, dict });
+  assert.throws(() => avec.ajouter({ type: 'aveu', motif: 'M. Canarix' }), /jeton du dictionnaire/);
+  assert.throws(() => avec.copie().ajouter({ type: 'aveu', motif: 'M. Canarix' }), /jeton du dictionnaire/);
+  assert.throws(() => sans.copie().ajouter({ type: 'aveu', motif: 'texte' }), /sans dictionnaire/);
 });

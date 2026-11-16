@@ -127,6 +127,8 @@ const MOTIF_GEL = 'gel D8 : 5 cycles sans geste du propriétaire, veille seule';
 const MOTIF_PRIX = 'aucun prix dans un brouillon : le propriétaire le fixe lui-même en revue';
 const MOTIF_SITE = 'publication refusée : verifierSite n’est pas vert (mentions légales, contact d’opposition, antifuite, chiffres sourcés, usage réel)';
 const MOTIF_CGU = 'contact d’un client codeur hors de la plateforme : interdit tant que les CGU ne sont pas lues et ne l’autorisent pas';
+const MOTIF_OPPOSITIONS_BROUILLON = 'oppositions indisponibles : aucun brouillon, son échantillon pourrait montrer une entreprise opposée (échec fermé)';
+const MOTIF_CGU_BROUILLON = 'brouillon destiné à un client codeur hors de la plateforme : interdit tant que les CGU codeur ne sont pas lues et ne l’autorisent pas';
 
 /** Table du Risk Agent : {regle, action, verdict, motif, condition?(action, ctx)}. Gelée. */
 export const POLITIQUE = Object.freeze([
@@ -147,6 +149,7 @@ export const POLITIQUE = Object.freeze([
   R('R-25', 'publier_site', 'revue_humaine', 'publication du site liée à l’empreinte exacte du HTML, après validation du propriétaire'),
   R('R-25', 'preparer_site', 'interdit', 'avant validation, la page ne s’écrit que dans prive/site/', cheminHorsSitePrive),
   R('R-25', 'preparer_site', 'autorise', 'page générée depuis etat/ et écrite dans prive/site/ seulement'),
+  R('R-23', 'creer_brouillon_gmail', 'interdit', MOTIF_CGU_BROUILLON, horsPlateformeNonAutorise),
   R('R-26', 'creer_brouillon_gmail', 'interdit', 'brouillon Gmail seulement pour une revue déjà validée', (a) => a?.params?.revue_validee !== true),
   R('R-26', 'creer_brouillon_gmail', 'revue_humaine', 'brouillon Gmail : destinataire désigné par le propriétaire, aucun envoi'),
   R('R-38', 'notifier', 'interdit', 'notification vide, de plus de 300 caractères, ou déjà émise dans ce cycle', (a, ctx) => !notificationPermise(a, ctx)),
@@ -170,10 +173,14 @@ export const POLITIQUE = Object.freeze([
   R('R-03', 'construire_liste', 'autorise', 'liste d’un segment gagné, ou régénération bornée d’un pari existant'),
   // Écritures privées et données validées par schéma.
   R('R-42', 'ecrire_recette', 'autorise', 'recette déclarative validée par schéma, essayée à blanc d’abord'),
+  R('R-14', 'rediger_brouillon', 'interdit', MOTIF_OPPOSITIONS_BROUILLON, (a, ctx) => ctx?.etat?.oppositions_dispo !== true),
+  R('R-23', 'rediger_brouillon', 'interdit', MOTIF_CGU_BROUILLON, horsPlateformeNonAutorise),
   R('R-22', 'rediger_brouillon', 'interdit', MOTIF_PRIX, contientPrix),
   R('R-21', 'rediger_brouillon', 'interdit', MOTIF_GEL, (a, ctx) => gele(ctx)),
   R('R-21', 'rediger_brouillon', 'interdit', 'deux propositions déjà ouvertes : aucune nouvelle', (a, ctx) => (ctx?.etat?.revues_ouvertes_n ?? 0) >= LIMITES.propositions_ouvertes),
   R('R-09', 'rediger_brouillon', 'autorise', 'brouillon écrit dans prive/ ; il part ensuite en revue humaine'),
+  R('R-14', 'regenerer_brouillon', 'interdit', MOTIF_OPPOSITIONS_BROUILLON, (a, ctx) => ctx?.etat?.oppositions_dispo !== true),
+  R('R-23', 'regenerer_brouillon', 'interdit', MOTIF_CGU_BROUILLON, horsPlateformeNonAutorise),
   R('R-22', 'regenerer_brouillon', 'interdit', MOTIF_PRIX, contientPrix),
   R('R-09', 'regenerer_brouillon', 'autorise', 'nouvelle version écrite dans prive/ ; l’ancienne revue devient caduque'),
   R('R-24', 'preparer_prealable', 'autorise', 'fiche de préalable (texte, étapes) écrite dans prive/ ; elle part en revue'),
@@ -292,12 +299,18 @@ const DEBUT_TEXTE = '<!-- velyx:texte:debut -->', FIN_TEXTE = '<!-- velyx:texte:
 const RE_RID = /^R-\d{4}-\d{2}-\d{2}-\d+$/;
 const RE_PID = /^P-[\w-]{1,120}$/;
 
-/** Dernier acte du propriétaire (ligne) et nombre de cycles écrits depuis. */
+/**
+ * Dernier acte du propriétaire (ligne) et nombre de cycles écrits depuis. Un cycle est un jour de Paris (jusqu'à 3
+ * passages, R-43) : on compte les jours distincts des actes « cycle » postérieurs au geste, pas leurs lignes, pour que
+ * le gel D8 (5 cycles) tombe au 5e jour quel que soit le nombre de passages. `passages` garde le nombre de lignes.
+ */
 export function cyclesSansGeste(registre) {
   const L = registre.lignes;
   let i = L.length - 1;
   while (i >= 0 && L[i].auteur !== 'proprietaire') i--;
-  return { n: L.slice(i + 1).filter((l) => l.type === 'cycle').length, dernier_geste: i >= 0 ? L[i].date : null, ligne: i >= 0 ? L[i].n : null };
+  const cycles = L.slice(i + 1).filter((l) => l.type === 'cycle');
+  const jours = new Set(cycles.map((l) => (typeof l.jour === 'string' ? l.jour : creerHorloge(l.date).jour())));
+  return { n: jours.size, passages: cycles.length, dernier_geste: i >= 0 ? L[i].date : null, ligne: i >= 0 ? L[i].n : null };
 }
 
 /**
@@ -310,13 +323,15 @@ export function revuesDe(registre, horloge = creerHorloge()) {
     if (l.type !== 'revue' || typeof l.id !== 'string' || par.has(l.id)) continue;
     par.set(l.id, { id: l.id, type: l.type_revue, ref: l.ref ?? null, annonce: l.annonce ?? null, empreinte: l.empreinte_revue,
       fichier_prive: l.fichier_prive, geste: l.geste, canal: l.canal ?? null, ouverte_le: l.date, expire_le: l.expire_le ?? null,
-      n: l.n, drapeaux: { envoyee: null, rejetee: null, caduque: null, validee: null }, motif_caduque: null });
+      n: l.n, drapeaux: { envoyee: null, rejetee: null, caduque: null, validee: null, satisfaite: null }, motif_caduque: null });
   }
   const marquer = (id, quoi, l, motif) => {
     const r = par.get(id);
     if (!r || r.drapeaux[quoi]) return;
     r.drapeaux[quoi] = l.date;
     if (quoi === 'caduque') r.motif_caduque = motif ?? null;
+    // Préalable satisfait par un geste du propriétaire : c'est ce geste qui résout la revue (latence du propriétaire).
+    if (quoi === 'caduque' && motif === 'satisfait') r.drapeaux.satisfaite = (Number.isInteger(l.geste_ligne) ? L[l.geste_ligne - 1]?.date : null) ?? l.date;
   };
   for (const l of L) {
     if (l.type === 'validation' && l.auteur === 'proprietaire' && par.get(l.revue)?.empreinte === l.empreinte_revue) marquer(l.revue, 'validee', l);
@@ -327,11 +342,21 @@ export function revuesDe(registre, horloge = creerHorloge()) {
   return [...par.values()].map((r) => {
     const d = r.drapeaux, expiree = r.expire_le !== null && Date.parse(r.expire_le) <= Date.parse(maintenant);
     const statut = d.envoyee ? 'envoyee' : d.rejetee ? 'rejetee' : d.caduque ? 'caduque' : d.validee ? 'validee' : expiree ? 'caduque' : 'ouverte';
-    const decision_le = [d.envoyee, d.rejetee, d.validee].filter(Boolean).sort()[0] ?? null;
+    const decision_le = [d.envoyee, d.rejetee, d.validee, d.satisfaite].filter(Boolean).sort()[0] ?? null;
     const { drapeaux, ...reste } = r;
     return { ...reste, statut, motif_caduque: statut === 'caduque' ? r.motif_caduque ?? 'expiree' : null, decision_le,
       age_h: Math.round(heuresEntre(r.ouverte_le, maintenant) * 10) / 10 };
   });
+}
+
+/**
+ * Geste du propriétaire qui satisfait une fiche de préalable : le premier acte « geste » postérieur à la revue sur son
+ * sujet (statut déclaré autre que « aucun » ; canal ouvert). → Ligne|null
+ */
+export function gesteSatisfaisant(registre, revue) {
+  if (!revue || revue.type !== 'prealable') return null;
+  return registre.lignes.find((l) => l.n > (revue.n ?? 0) && l.type === 'geste' && l.auteur === 'proprietaire' && l.sujet === revue.ref
+    && (l.sujet === 'statut' ? l.valeur !== 'aucun' : l.sujet === 'canal' ? /:ouvert$/.test(String(l.valeur)) : false)) ?? null;
 }
 
 /** Revues ouvertes (ni validées, ni rejetées, ni envoyées, ni caduques, ni expirées). */
@@ -356,7 +381,7 @@ const puces = (xs, vide) => (Array.isArray(xs) && xs.length ? xs.map((x) => `- $
  * Fiche privée d'une revue (markdown). Les ancres de prix sont données à titre d'information, jamais pré-remplies.
  * Le texte soumis est recopié tel quel entre deux marqueurs : c'est lui que couvre l'empreinte.
  */
-export function rendreRevue(revue, { texte, controles = [], affirme = [], ne_promet_pas = [], ancres_prix = [] } = {}) {
+export function rendreRevue(revue, { texte, controles = [], affirme = [], ne_promet_pas = [], ancres_prix = [], notes = null } = {}) {
   const emp = String(revue.empreinte ?? '');
   return [
     `# Revue ${revue.id} (${revue.type})`, '',
@@ -372,6 +397,7 @@ export function rendreRevue(revue, { texte, controles = [], affirme = [], ne_pro
     '', '## Ce que le texte affirme', '', puces(affirme, 'non précisé'),
     '', '## Ce qu’il ne promet pas', '', puces(ne_promet_pas, 'non précisé'),
     '', '## Repères de prix (information seulement, jamais pré-remplis ; le propriétaire choisit)', '', puces(ancres_prix, 'aucun repère cité'), '',
+    ...(typeof notes === 'string' && notes.trim() ? ['## Notes pour le propriétaire (hors du texte soumis : jamais envoyées ni publiées)', '', notes.trim(), ''] : []),
   ].join('\n');
 }
 
@@ -381,21 +407,31 @@ export function rendreRevue(revue, { texte, controles = [], affirme = [], ne_pro
  * (type, ref) rend les revues ouvertes précédentes caduques (motif « remplacee »). 2 propositions ouvertes au plus.
  * → {revue, acte, remplacees: string[]}
  */
-export function mettreEnRevue({ type, ref = null, texte, geste, canal = null, expire_le, annonce = null, controles, affirme, ne_promet_pas, ancres_prix } = {},
-  { registre, horloge = creerHorloge(), magasin } = {}) {
+export function mettreEnRevue({ type, ref = null, texte, geste, canal = null, expire_le, annonce = null, controles, affirme, ne_promet_pas, ancres_prix, notes,
+  sirens = null } = {}, { registre, horloge = creerHorloge(), magasin } = {}) {
   if (!registre || !magasin) throw new Error('mettreEnRevue : registre et magasin requis');
   if (!TYPES_REVUE.includes(type)) throw new Error(`mettreEnRevue : type « ${type} » hors de ${TYPES_REVUE.join(', ')}`);
   if (typeof texte !== 'string' || !texte.trim()) throw new Error('mettreEnRevue : texte non vide attendu');
   if (texte.includes(DEBUT_TEXTE) || texte.includes(FIN_TEXTE)) throw new Error('mettreEnRevue : le texte contient un marqueur réservé');
+  if (typeof notes === 'string' && (notes.includes(DEBUT_TEXTE) || notes.includes(FIN_TEXTE))) throw new Error('mettreEnRevue : les notes contiennent un marqueur réservé');
+  // R-21 : une proposition n'entre en revue que complète, avec les contrôles portés sur exactement ce texte ; aucun
+  // élément n'y entre avec un contrôle bloquant en échec (le texte couvert par l'empreinte est celui qui a été contrôlé).
+  if (controles !== undefined && controles !== null && !Array.isArray(controles)) throw new Error('mettreEnRevue : controles, liste attendue');
+  if (type === 'proposition' && !(Array.isArray(controles) && controles.length)) throw new Error('mettreEnRevue : une proposition exige ses contrôles (R-21)');
+  const enEchec = (controles ?? []).filter((c) => c?.gravite === 'bloquant' && c.ok !== true);
+  if (enEchec.length) throw new Error(`mettreEnRevue : contrôle bloquant en échec (${enEchec.map((c) => c.code).join(', ')}) ; rien n’entre en revue`);
   if (typeof geste !== 'string' || !geste.trim()) throw new Error('mettreEnRevue : geste exact du propriétaire attendu');
   if (ref !== null && (typeof ref !== 'string' || !ref || ref.length > 120)) throw new Error('mettreEnRevue : ref texte de 1 à 120 caractères');
+  if (sirens !== null && (!Array.isArray(sirens) || sirens.some((x) => !/^\d{9}$/.test(String(x))))) throw new Error('mettreEnRevue : sirens, liste de SIREN de 9 chiffres attendue');
+  const indexer = (id) => { if (sirens?.length) magasin.ecrirePrive(indexRevue(id), { revue: id, sirens: [...new Set(sirens.map(String))].sort() }); };
   const expire = expire_le ?? new Date(horloge.maintenant().getTime() + LIMITES.revue_jours * 864e5).toISOString();
   if (!Number.isFinite(Date.parse(expire))) throw new Error('mettreEnRevue : expire_le illisible');
   const emp = empreinte(texte), cle = CLES.revue(type, ref ?? '-', emp);
   const existante = registre.trouver(cle);
   if (existante) {
     const revue = revuesDe(registre, horloge).find((r) => r.id === existante.id);
-    if (!magasin.existe(existante.fichier_prive)) magasin.ecrirePrive(existante.fichier_prive, rendreRevue(revue, { texte, controles, affirme, ne_promet_pas, ancres_prix }));
+    if (!magasin.existe(existante.fichier_prive)) magasin.ecrirePrive(existante.fichier_prive, rendreRevue(revue, { texte, controles, affirme, ne_promet_pas, ancres_prix, notes }));
+    if (!magasin.existe(indexRevue(existante.id))) indexer(existante.id);
     return { revue, acte: existante, remplacees: [] };
   }
   const ouvertes = fileOuverte(registre, horloge);
@@ -411,8 +447,41 @@ export function mettreEnRevue({ type, ref = null, texte, geste, canal = null, ex
   const acte = registre.ajouter({ type: 'revue', id, type_revue: type, ref, empreinte_revue: emp, geste, fichier_prive, canal, expire_le: expire,
     ...(annonce ? { annonce: String(annonce) } : {}), cle });
   const revue = revuesDe(registre, horloge).find((r) => r.id === id);
-  magasin.ecrirePrive(fichier_prive, rendreRevue(revue, { texte, controles, affirme, ne_promet_pas, ancres_prix }));
+  indexer(id);
+  magasin.ecrirePrive(fichier_prive, rendreRevue(revue, { texte, controles, affirme, ne_promet_pas, ancres_prix, notes }));
   return { revue, acte, remplacees: anciennes.map((a) => a.id) };
+}
+
+/** Index privé d'une revue : SIREN des fiches de son échantillon (jamais au registre ; purgé avec une opposition). */
+export const indexRevue = (id) => `${DOSSIER_REVUES}/${id}.sirens.json`;
+
+/**
+ * Revues encore actives (ouvertes, ou validées mais pas envoyées) dont l'échantillon montre cette entreprise : index privé
+ * de la revue (prive/revues/<R-id>.sirens.json) ; à défaut (revue antérieure à l'index), échantillons de la mémoire
+ * (memoire.echantillons E-<recette>-<jour>) de la recette du pari lié à la revue. → Revue[]
+ */
+export function revuesAvecSiren(siren, { registre, magasin, horloge = creerHorloge() } = {}) {
+  const s = String(siren), actives = revuesDe(registre, horloge).filter((r) => ['ouverte', 'validee'].includes(r.statut));
+  let memoire = null;
+  try { memoire = magasin.lireJson('prive/memoire.json'); } catch { memoire = null; }
+  const echantillons = Object.entries(memoire?.echantillons ?? {});
+  return actives.filter((r) => {
+    let index = null;
+    try { index = magasin.lireJson(indexRevue(r.id)); } catch { index = null; }
+    if (Array.isArray(index?.sirens)) return index.sirens.map(String).includes(s);
+    const recette = registre.derniere('pari', (l) => l.revue === r.id)?.recette;
+    return Boolean(recette) && echantillons.some(([k, e]) => k.startsWith(`E-${recette}-`) && (e?.sirens ?? []).map(String).includes(s));
+  });
+}
+
+/**
+ * R-13 : une opposition rend caduques les revues actives dont l'échantillon montre l'entreprise (avant la purge, qui
+ * efface l'index). L'acte ne porte ni le SIREN ni le nom : seulement l'id de la revue et le motif « opposition ».
+ * → lignes écrites (actes decision invalider_revue)
+ */
+export function invaliderRevuesOpposees(siren, { registre, magasin, horloge = creerHorloge() } = {}) {
+  return revuesAvecSiren(siren, { registre, magasin, horloge }).map((r) => registre.ajouter({ type: 'decision', action: 'invalider_revue', verdict: 'autorise',
+    regle: 'R-13', revue: r.id, motif: 'opposition reçue pour une entreprise de l’échantillon', cle: `caduque:${r.id}` }));
 }
 
 /**
@@ -448,7 +517,7 @@ export function etatRevuePublic(revues) {
 
 /** Grammaire des gestes admis dans la session. */
 export const GRAMMAIRE_GESTES = Object.freeze(['valide <R-id>#<empreinte6> [choix]', 'rejette <R-id> <motif>', 'envoye <R-id> canal=<email|comeup|malt|autre>',
-  'reponse <P-id> <issue ∈ ISSUES>', 'encaisse <eur> <P-id|libre>', 'depense <eur> <objet>', 'statut <micro|societe|aucun>', 'canal <id> <ouvert|ferme>',
+  'reponse <P-id> <issue ∈ ISSUES>', 'encaisse <eur> <P-id|libre> [ref=<n° de facture>]', 'depense <eur> <objet>', 'statut <micro|societe|aucun>', 'canal <id> <ouvert|ferme>',
   'opposition <siren>']);
 const CANAUX_ENVOI = ['email', 'comeup', 'malt', 'autre'];
 
@@ -484,8 +553,16 @@ export function appliquerGeste(phrase, { registre, horloge = creerHorloge(), mag
   if (verification !== 'session') throw refus('seule la vérification « session » est disponible (commentaires GitHub : reportés)');
   const p = String(phrase ?? '').trim().replace(/\s+/g, ' ');
   if (!p || p.length > 400) throw refus('phrase vide ou trop longue');
-  const preuve = sha256Texte(p), source = source_id ?? horloge.iso();
+  // Idempotence (R-04) : la clé d'un geste vient de la phrase normalisée et du jour de Paris, jamais de l'heure : la
+  // même phrase saisie deux fois le même jour n'écrit pas deux actes. Un acte d'argent ou une réponse déjà consignés
+  // ce jour sont refusés (un second encaissement du même montant porte sa référence : « ref=<n° de facture> ») ; un
+  // statut ou un canal se consigne seulement s'il change l'état (clé liée au dernier acte du même sujet).
+  const jour = horloge.jour(), preuve = sha256Texte(p), source = source_id ?? jour;
   const proprio = { auteur: 'proprietaire', verification: 'session', preuve_empreinte: preuve };
+  const dejaCeJour = (quoi) => {
+    const d = registre.lignes.find((l) => l.auteur === 'proprietaire' && l.preuve_empreinte === preuve && typeof l.date === 'string' && creerHorloge(l.date).jour() === jour);
+    if (d) throw refus(`« ${p} » déjà consigné ce jour (acte ${d.n}) : rien n'est écrit deux fois${quoi ? ` ; ${quoi}` : ''}`);
+  };
   const actes = [];
   let opposition;
   let m;
@@ -513,20 +590,28 @@ export function appliquerGeste(phrase, { registre, horloge = creerHorloge(), mag
   } else if ((m = /^reponse (P-[\w-]+) ([a-z_]+)$/.exec(p))) {
     if (!RE_PID.test(m[1])) throw refus('identifiant de pari illisible');
     if (!ISSUES.includes(m[2])) throw refus(`issue « ${m[2]} » hors de ${ISSUES.join(', ')}`);
+    dejaCeJour();
     actes.push(registre.ajouter({ type: 'reponse', ...proprio, pari: m[1], issue: m[2], cle: CLES.geste(source, p) }));
-  } else if ((m = /^encaisse (\d+(?:[.,]\d{1,2})?) ?(?:€|eur)? (P-[\w-]+|libre)$/i.exec(p))) {
+  } else if ((m = /^encaisse (\d+(?:[.,]\d{1,2})?) ?(?:€|eur)? (P-[\w-]+|libre)(?: ref=([A-Za-z0-9][A-Za-z0-9_-]{0,29}))?$/i.exec(p))) {
     const montant = montantFr(m[1]);
     if (!(montant > 0)) throw refus('montant strictement positif attendu');
+    dejaCeJour('un second encaissement du même montant le même jour porte sa référence (« encaisse <eur> <P-id|libre> ref=<n° de facture> »)');
     actes.push(registre.ajouter({ type: 'encaissement', ...proprio, montant_eur: montant, preuve: 'déclaration du propriétaire en session (phrase gardée en mémoire privée)',
-      ...(m[2] === 'libre' ? {} : { pari: m[2] }), cle: CLES.geste(source, p) }));
+      ...(m[2].toLowerCase() === 'libre' ? {} : { pari: m[2] }), ...(m[3] ? { reference: m[3] } : {}), cle: CLES.geste(source, p) }));
   } else if ((m = /^depense (\d+(?:[.,]\d{1,2})?) ?(?:€|eur)? (.+)$/i.exec(p))) {
     const montant = montantFr(m[1]);
     if (!(montant > 0)) throw refus('montant strictement positif attendu');
-    actes.push(registre.ajouter({ type: 'depense', ...proprio, montant_eur: montant, objet: texteLibre(m[2], 'objet'), autorise_par: 'proprietaire', cle: CLES.geste(source, p) }));
+    const objet = texteLibre(m[2], 'objet');
+    dejaCeJour('une seconde dépense le même jour se distingue par son objet');
+    actes.push(registre.ajouter({ type: 'depense', ...proprio, montant_eur: montant, objet, autorise_par: 'proprietaire', cle: CLES.geste(source, p) }));
   } else if ((m = /^statut (micro|societe|aucun)$/.exec(p))) {
-    actes.push(registre.ajouter({ type: 'geste', ...proprio, sujet: 'statut', valeur: m[1], cle: CLES.geste(source, p) }));
+    const dernier = registre.derniere('geste', (l) => l.auteur === 'proprietaire' && l.sujet === 'statut');
+    if (dernier?.valeur === m[1]) throw refus(`statut déjà « ${m[1]} » (acte ${dernier.n}) : rien à consigner`);
+    actes.push(registre.ajouter({ type: 'geste', ...proprio, sujet: 'statut', valeur: m[1], cle: CLES.geste(`${source}#${dernier?.n ?? 0}`, p) }));
   } else if ((m = /^canal ([a-z_]{2,30}) (ouvert|ferme)$/.exec(p))) {
-    actes.push(registre.ajouter({ type: 'geste', ...proprio, sujet: 'canal', valeur: `${m[1]}:${m[2]}`, cle: CLES.geste(source, p) }));
+    const dernier = registre.derniere('geste', (l) => l.auteur === 'proprietaire' && l.sujet === 'canal' && String(l.valeur).split(':')[0] === m[1]);
+    if (dernier?.valeur === `${m[1]}:${m[2]}`) throw refus(`canal ${m[1]} déjà « ${m[2]} » (acte ${dernier.n}) : rien à consigner`);
+    actes.push(registre.ajouter({ type: 'geste', ...proprio, sujet: 'canal', valeur: `${m[1]}:${m[2]}`, cle: CLES.geste(`${source}#${dernier?.n ?? 0}`, p) }));
   } else if ((m = /^opposition (\d{3} ?\d{3} ?\d{3})$/.exec(p))) {
     opposition = m[1].replace(/ /g, '');
   } else {

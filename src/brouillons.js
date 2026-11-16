@@ -412,7 +412,7 @@ export function pari(revue) {
     critere_succes: `issue ∈ {${ISSUES_POSITIVES.join(', ')}} au plus 7 j après l’envoi`,
     critere_arret: 'après 7 j sans issue positive, demander l’issue au propriétaire ; le pari n’est perdu que sur son acte',
     echeance: 'envoi + 7 jours',
-    geste_proprietaire: `relire prive/revue/${revue.id}.md, compléter les champs entre crochets (prix, nom, adresse d’opposition), envoyer depuis son propre compte (${canal}), puis consigner l’envoi : velyx envoye P-${revue.id} --canal ${canal}`,
+    geste_proprietaire: `relire prive/revues/${revue.id}.md, compléter les champs entre crochets (prix, nom, adresse d’opposition), envoyer depuis son propre compte (${canal}), puis consigner l’envoi : velyx envoye P-${revue.id} --canal ${canal}`,
     canal, annonce: revue.annonce ?? null,
   };
 }
@@ -422,34 +422,52 @@ export function pari(revue) {
 // Échec fermé : une liste sans champ opposition (liste v1) ne produit aucun brouillon. Un texte qui échoue à un
 // contrôle bloquant est marqué « BLOQUÉ » en tête, avec les motifs.
 
+/**
+ * Brouillon v1 (une liste contrôlée) sous forme structurée, pour `velyx brouillon` : texte soumis (exactement celui que
+ * les contrôles ont vu), notes du propriétaire à part, contrôles, SIREN de l'échantillon (index privé de la revue).
+ * options : {horloge, oppositions: Set<siren>} (oppositions reçues, exclues par G4 en plus de celles du registre).
+ * @returns {{texte, notes, controles, ok, empreinte, sirens: string[], bloquants: ResultatControle[]}}
+ */
+export function preparerV1(id, liste, compteV1, { horloge = creerHorloge(), oppositions } = {}) {
+  if (!IDS_V1.includes(id)) parPreparer(id)();
+  const cibles = liste?.cibles ?? [];
+  const sansOpposition = cibles.filter((e) => typeof e?.opposition !== 'boolean').length;
+  if (sansOpposition) throw new Error(`brouillon « ${id} » refusé : ${sansOpposition} fiche(s) sans champ opposition (liste v1, oppositions non exclues) ; relancer « velyx cibler ${id} »`);
+  const recette = RECETTES[id];
+  const { gardees } = appliquer({ garder: () => true, signaux: (e) => e.signaux ?? [], complet: (e) => e.complet }, cibles,
+    { horloge, ...(oppositions instanceof Set ? { oppositions } : {}) });
+  const dict = jetonsDe(cibles);
+  const zeros = Object.fromEntries((recette?.codes_signaux ?? []).map((c) => [c, 0]));
+  const lignes = echantillonMinimise(gardees, { horloge, dict });
+  const p = preparer(recette?.gabarit ?? id, {
+    compte: { ...compteV1, par_signal: { ...zeros, ...(compteV1?.par_signal ?? {}) } },
+    params: recette ? chiffresRecette(recette) : {},
+    lecture: { complet: liste.complet !== false, lu_le: liste.lu_le },
+    echantillon: { lignes },
+    limites: recette?.limites ?? [],
+    sources: { compte: `liste privée ${id} du ${String(liste.lu_le).slice(0, 10)} (appliquer, contrôles M4)`, param: `etat/recettes/${id}.json`, echantillon: 'tête de la liste classée' },
+  }, { horloge, dict });
+  const bloquants = p.controles.filter((c) => c.gravite === 'bloquant' && !c.ok);
+  return { texte: p.texte, notes: p.notes, controles: p.controles, ok: bloquants.length === 0, empreinte: p.empreinte, bloquants,
+    sirens: gardees.slice(0, lignes.length).map((e) => String(e.siren)).filter((x) => /^\d{9}$/.test(x)) };
+}
+
+// Forme texte de la v1 (MODELES), gardée pour la compatibilité : `velyx brouillon` passe par preparerV1, ne met rien en
+// revue quand un contrôle bloquant échoue et ne mêle jamais les notes au texte soumis.
 function modeleV1(id) {
   return (liste, compteV1) => {
-    const cibles = liste?.cibles ?? [];
-    const sansOpposition = cibles.filter((e) => typeof e?.opposition !== 'boolean').length;
-    if (sansOpposition) throw new Error(`brouillon « ${id} » refusé : ${sansOpposition} fiche(s) sans champ opposition (liste v1, oppositions non exclues) ; relancer « velyx cibler ${id} »`);
-    const horloge = creerHorloge(), recette = RECETTES[id];
-    const { gardees } = appliquer({ garder: () => true, signaux: (e) => e.signaux ?? [], complet: (e) => e.complet }, cibles, { horloge });
-    const dict = jetonsDe(cibles);
-    const zeros = Object.fromEntries((recette?.codes_signaux ?? []).map((c) => [c, 0]));
-    const p = preparer(recette?.gabarit ?? id, {
-      compte: { ...compteV1, par_signal: { ...zeros, ...(compteV1?.par_signal ?? {}) } },
-      params: recette ? chiffresRecette(recette) : {},
-      lecture: { complet: liste.complet !== false, lu_le: liste.lu_le },
-      echantillon: { lignes: echantillonMinimise(gardees, { horloge, dict }) },
-      limites: recette?.limites ?? [],
-      sources: { compte: `liste privée ${id} du ${String(liste.lu_le).slice(0, 10)} (appliquer, contrôles M4)`, param: `etat/recettes/${id}.json`, echantillon: 'tête de la liste classée' },
-    }, { horloge, dict });
-    const bloquants = p.controles.filter((c) => c.gravite === 'bloquant' && !c.ok);
-    const entete = bloquants.length ? `<!-- BLOQUÉ, ne pas envoyer en l’état : ${bloquants.map((c) => `${c.code} (${c.motif})`).join(' ; ')} -->\n\n` : '';
+    const p = preparerV1(id, liste, compteV1);
+    const entete = p.bloquants.length ? `<!-- BLOQUÉ, ne pas envoyer en l’état : ${p.bloquants.map((c) => `${c.code} (${c.motif})`).join(' ; ')} -->\n\n` : '';
     return `${entete}${p.texte}\n\n<!-- Empreinte ${p.empreinte}. NOTES POUR LE PROPRIÉTAIRE (ne pas envoyer)\n\n${p.notes}\n-->`;
   };
 }
 
 // Le brouillon des courtiers croise deux listes (destinataires : courtiers-construction ; échantillon et comptes :
 // btp-creations-zone du département du courtier) : il ne passe pas par le chemin v1 à une seule liste.
-const parPreparer = (id) => () => {
-  throw new Error(`brouillon « ${id} » : se prépare par preparer('courtiers-construction', …) avec un échantillon minimisé de btp-creations-zone sur le département du courtier`);
-};
+const IDS_V1 = Object.freeze(['rachat-it-idf', 'courtier-btp-aura']);
+function parPreparer(id) { return () => {
+  throw new Error(`brouillon « ${id} » : deux listes croisées, pas le chemin v1 à une liste ; « velyx brouillon courtiers-construction [--departement <dep>] » ou l'action rediger_brouillon du cycle (cycle.brouillonCourtiers)`);
+}; }
 
 /** Compatibilité v1 : id de recette → (liste, compte) → texte. */
 export const MODELES = Object.freeze({

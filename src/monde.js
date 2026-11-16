@@ -111,15 +111,30 @@ export function sauverMonde(monde) {
 // ---------------------------------------------------------------------------------------------------------------------
 // COMPRENDRE.
 
+// Motifs « données » précis : un mot seul (« collecte », « identifier », « dirigeants ») est ambigu dans une annonce
+// commerciale (« syndicats de collecte », « identifier les besoins », « rendez-vous avec des dirigeants ») ; il ne compte
+// que suivi de son objet (des données, des fiches, des entreprises…).
+const OBJETS_DONNEES = '(?:donnees|informations|fiches?|coordonnees|contacts?|e-?mails?|adresses|leads?|numeros|entreprises?|societes?|prospects?|cibles?|decideurs|dirigeants)';
+const ARTICLE = "(?:(?:de|des|du|les|la|le|d['’]|l['’])\\s*)?";
 const MOTS_DONNEES = [
   ['base', /\bbases?\s+(?:de\s+(?:donnees|\d|contacts?|prospects?|clients?|leads?|entreprises?|societes?)|clients?|prospects?|contacts?|leads?|e-?mails?)/],
-  ['fichier', /\bfichiers?\b/], ['liste', /\blistes?\b/], ['identifier', /\bidentifi(?:er|cation)\w*/], ['qualifier', /\bqualif(?:ier|ication)\w*/],
-  ['collecte', /\bcollect(?:e|er|es|ees?)\b/], ['enrichissement', /\benrichi(?:r|ssement)\b/], ['dirigeants', /\bdirigeants?\b/],
+  ['fichier', /\bfichiers?\b/], ['liste', /\blistes?\b/],
+  ['identifier', new RegExp(`\\bidentifi(?:er|cation)\\s+${ARTICLE}(?:[a-z]+\\s+)?${OBJETS_DONNEES}\\b`)],
+  ['qualifier', new RegExp(`\\bqualif(?:ier|ication)\\s+${ARTICLE}(?:[a-z]+\\s+)?(?:fichiers?|bases?|donnees|listes?)\\b`)],
+  ['collecte', new RegExp(`\\bcollect(?:e|er|es|ees?)\\s+(?:et\\s+[a-z]+\\s+)?${ARTICLE}${OBJETS_DONNEES}\\b`)], ['enrichissement', /\benrichi(?:r|ssement)\b/],
+  ['dirigeants', /\b(?:noms?|coordonnees|contacts?|e-?mails?|listes?|fichiers?)\s+(?:des\s+|de\s+|du\s+)?dirigeants?\b/],
 ];
 const MOTS_RDV = [['rendez-vous', /\brendez[\s-]?vous\b/], ['rdv', /\brdv\b/], ['appels', /\bappels?\b/], ['télé', /\btele(?!travail|charg|vis)\w+/]];
+/** Tags qui disent le livrable : un appel (Télémarketing) ou une saisie de données (Data entry, Data mining). */
+const TAG_RDV = 'Télémarketing', TAGS_DONNEES = Object.freeze(['Data entry', 'Data mining']);
 const RE_DEV = /developpement (?:web|specifique|logiciel|mobile)|creation de site|application|logiciel|wordpress|shopify|full-stack|back-end|front-end|\bapi\b|\bphp\b|python|react|flutter|laravel|prestashop|woocommerce|drupal|\bwix\b|\bsaas\b|\bios\b|android|\berp\b|\bcms\b/;
 
-/** Famille d'une annonce, par règles lexicales (titre, résumé, description) puis tags ; un tag de développement sans tag de prospection l'emporte. */
+/**
+ * Famille d'une annonce, par tags puis règles lexicales (titre, résumé, description). Ordre : un tag de développement
+ * sans tag de prospection → dev ; le tag Télémarketing sans tag de données → rdv_appels (le livrable est un appel, quel
+ * que soit le mot du texte) ; « données » seulement si ses motifs l'emportent strictement sur ceux des appels (à
+ * égalité, un tag de données sans Télémarketing départage ; sinon rdv_appels).
+ */
 export function classerAnnonce(a) {
   const tags = Array.isArray(a?.tags) ? a.tags : [];
   const texte = sansAccents(`${a?.titre ?? ''} ${a?.resume ?? ''} ${a?.description ?? ''}`).toLowerCase();
@@ -127,9 +142,11 @@ export function classerAnnonce(a) {
   const mr = MOTS_RDV.filter(([, re]) => re.test(texte)).map(([m]) => m);
   const dev = tags.filter((t) => TAGS_DEV.includes(t) || RE_DEV.test(sansAccents(t).toLowerCase()));
   const prospection = tags.some((t) => TAGS_CIBLE.includes(t));
+  const tagRdv = tags.includes(TAG_RDV), tagDonnees = tags.some((t) => TAGS_DONNEES.includes(t));
   let famille = 'autre', motifs = [];
   if (dev.length && !prospection) { famille = 'dev'; motifs = dev.map((t) => `tag:${t}`); }
-  else if (md.length && md.length >= mr.length) { famille = 'donnees'; motifs = [...md, ...mr]; }
+  else if (tagRdv && !tagDonnees) { famille = 'rdv_appels'; motifs = [`tag:${TAG_RDV}`, ...mr, ...md]; }
+  else if (md.length && (md.length > mr.length || (md.length === mr.length && tagDonnees && !tagRdv))) { famille = 'donnees'; motifs = [...md, ...mr]; }
   else if (mr.length) { famille = 'rdv_appels'; motifs = [...mr, ...md]; }
   else if (dev.length) { famille = 'dev'; motifs = dev.map((t) => `tag:${t}`); }
   if (!FAMILLES.includes(famille)) throw new Error(`famille inconnue : ${famille}`);
@@ -138,6 +155,20 @@ export function classerAnnonce(a) {
 
 const ageDe = (a, luLe) => (typeof a?.publie_le === 'string' && Number.isFinite(Date.parse(a.publie_le)) ? Math.max(0, heuresEntre(a.publie_le, luLe))
   : typeof a?.age_h === 'number' ? a.age_h : null);
+
+/**
+ * Demande ciblée (fait demande_cible_14j de COMPRENDRE, KPI demande_cible_14j de MESURER : une seule définition) : une
+ * annonce d'un tag cible (Prospection commerciale, Télémarketing, Data entry) ou de famille « données », publiée depuis
+ * 14 j au plus. Âge : depuis publie_le s'il est connu, sinon l'âge lu au relevé (age_h) plus le temps écoulé depuis
+ * (point de série relevé à t). x : Annonce ou PointSerie ; famille : famille calculée (sinon x.famille).
+ */
+export function estDemandeCible(x, maintenant, famille = x?.famille) {
+  if (!((x?.tags ?? []).some((t) => TAGS_CIBLE.includes(t)) || famille === 'donnees')) return false;
+  const h = ageDe(x, maintenant) ?? null;
+  const vieillit = typeof x?.publie_le !== 'string' && typeof x?.age_h === 'number' && typeof x?.t === 'string' && Number.isFinite(Date.parse(x.t))
+    ? Math.max(0, heuresEntre(x.t, maintenant)) : 0;
+  return h !== null && h + vieillit <= FENETRE_CIBLE_H;
+}
 
 function pointsParId(series) {
   const m = new Map();
@@ -159,7 +190,10 @@ export function comprendre(obs, { monde = null, horloge = null, series = [] } = 
   const jour = obs?.jour ?? jourDe(lu_le);
   const sante = obs?.sante ?? { ok: false, n: 0, rss_n: 0 };
   const annoncesObs = Array.isArray(obs?.annonces) ? obs.annonces : [];
-  const annonces = annoncesObs.map((a) => ({ id: a.id, ...classerAnnonce(a) }));
+  // Annonce réhydratée d'une série (conteneur neuf : ni titre ni résumé) : la famille classée au relevé est reprise.
+  const sansTexte = (a) => ![a.titre, a.resume, a.description].some((x) => typeof x === 'string' && x.trim());
+  const annonces = annoncesObs.map((a) => ({ id: a.id, ...(sansTexte(a) && FAMILLES.includes(a.famille)
+    ? { famille: a.famille, motifs: ['serie'], pertinente: a.famille === 'donnees' || a.famille === 'rdv_appels' } : classerAnnonce(a)) }));
   const familleDe = new Map(annonces.map((a) => [a.id, a.famille]));
   const faits = [];
   const fait = (sujet, mesure, valeur, n, source, extra = {}) => {
@@ -178,8 +212,7 @@ export function comprendre(obs, { monde = null, horloge = null, series = [] } = 
 
   if (sante.ok === true) {
     const offres = (L) => L.map((a) => a.offres).filter((o) => typeof o === 'number');
-    const cible = annoncesObs.filter((a) => (a.tags ?? []).some((t) => TAGS_CIBLE.includes(t)) || familleDe.get(a.id) === 'donnees')
-      .filter((a) => { const h = ageDe(a, lu_le); return h !== null && h <= FENETRE_CIBLE_H; });
+    const cible = annoncesObs.filter((a) => estDemandeCible(a, lu_le, familleDe.get(a.id)));
     fait('demande_cible_14j', 'annonces', cible.length, cible.length, 'codeur:liste');
     fait('demande_cible_14j', 'mediane_offres', mediane(offres(cible)), offres(cible).length, 'codeur:liste');
     const prosp = annoncesObs.filter((a) => (a.tags ?? []).some((t) => TAGS_PROSPECTION.includes(t)));
