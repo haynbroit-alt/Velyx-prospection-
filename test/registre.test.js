@@ -31,7 +31,8 @@ test('le journal réel passe verifier() après extension, mandat de la ligne 14 
   fs.copyFileSync(JOURNAL_REEL, f);
   const r = new Registre(f, { horloge: creerHorloge('2026-11-16T05:41:00Z') });
   const n = r.lignes.length;
-  const l = r.ajouter({ type: 'cycle', cle: CLES.cycle('2026-11-16', 1), jour: '2026-11-16', passage: 1, etapes: [], requetes: { codeur: 0, sirene: 0 }, duree_s: 0 });
+  // Clé absente du journal réel, quel que soit le nombre de cycles déjà consignés (un acte de même clé serait rendu tel quel).
+  const l = r.ajouter({ type: 'cycle', cle: CLES.cycle('2099-01-01', 1), jour: '2099-01-01', passage: 1, etapes: [], requetes: { codeur: 0, sirene: 0 }, duree_s: 0 });
   assert.equal(l.n, n + 1);
   assert.equal(l.precedente, r.lignes[n - 1].empreinte);
   assert.equal(l.date, '2026-11-16T05:41:00.000Z');

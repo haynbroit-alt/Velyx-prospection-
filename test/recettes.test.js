@@ -137,11 +137,11 @@ test('btp-creations-zone : département et ancienneté en variables, filtre de d
   assert.equal(r42.garder(n(12)), false, 'autre département');
   const r74 = compiler(s, H, { departement: '74' });
   assert.equal(r74.variables.mois, 12, 'défaut');
-  const creees = [n(12), { ...n(12), siren: '999000911', opposition: true }, { ...n(12), siren: '999000912', statut_diffusion: 'P' },
+  const creees = [n(12), { ...n(12), siren: '999000911', opposition: true }, { ...n(12), siren: '999000922', statut_diffusion: 'P' },
     { ...n(12), siren: '999000913', creation: '2024-01-10' }];
   const { gardees, exclues, compte } = appliquer(r74, creees, { horloge: H, oppositions: new Set() });
   assert.deepEqual(gardees.map((e) => e.siren), [n(12).siren]);
-  assert.deepEqual(exclues.map((e) => e.siren).sort(), ['999000911', '999000912']);
+  assert.deepEqual(exclues.map((e) => e.siren).sort(), ['999000911', '999000922']);
   assert.equal(compte.hors_recette, 1, 'créée en 2024 : hors des 12 mois');
   assert.ok(gardees[0].signaux.some((x) => x.code === 'rge'));
   assert.deepEqual(compte.par_signal, { rge: 1, operation: 0, employeur: 0 });

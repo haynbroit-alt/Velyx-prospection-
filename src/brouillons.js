@@ -412,7 +412,7 @@ export function pari(revue) {
     critere_succes: `issue ∈ {${ISSUES_POSITIVES.join(', ')}} au plus 7 j après l’envoi`,
     critere_arret: 'après 7 j sans issue positive, demander l’issue au propriétaire ; le pari n’est perdu que sur son acte',
     echeance: 'envoi + 7 jours',
-    geste_proprietaire: `relire prive/revue/${revue.id}.md, compléter les champs entre crochets (prix, nom, adresse d’opposition), envoyer depuis son propre compte (${canal}), puis consigner l’envoi : velyx envoye P-${revue.id} --canal ${canal}`,
+    geste_proprietaire: `relire prive/revues/${revue.id}.md, compléter les champs entre crochets (prix, nom, adresse d’opposition), envoyer depuis son propre compte (${canal}), puis consigner l’envoi : velyx envoye P-${revue.id} --canal ${canal}`,
     canal, annonce: revue.annonce ?? null,
   };
 }

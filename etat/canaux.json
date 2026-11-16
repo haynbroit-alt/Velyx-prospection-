@@ -1,0 +1,47 @@
+{
+ "codeur": {
+  "role": "observation",
+  "cout_envoi": "payant : abonnement d’au moins 31,90 € HT par 30 jours et 4 % de commission (page tarifs lue le 15/11, ligne 13)",
+  "statut": "exclu",
+  "cgu": "inconnue",
+  "preuves": [
+   13,
+   14
+  ],
+  "payant": true,
+  "geste": "aucun : exclu par le mandat 0 € (ligne 14)"
+ },
+ "email_direct": {
+  "role": "envoi",
+  "cout_envoi": "0 € (messagerie du propriétaire)",
+  "statut": "a_decider",
+  "cgu": "inconnue",
+  "preuves": [
+   15
+  ],
+  "payant": false,
+  "geste": "canal email ouvert"
+ },
+ "comeup": {
+  "role": "envoi",
+  "cout_envoi": "publication gratuite, 20 % de commission sur les ventes (source secondaire, ligne 15)",
+  "statut": "a_ouvrir",
+  "cgu": "inconnue",
+  "preuves": [
+   15
+  ],
+  "payant": false,
+  "geste": "canal comeup ouvert"
+ },
+ "malt": {
+  "role": "envoi",
+  "cout_envoi": "profil gratuit, commission d’environ 5 à 10 % (source secondaire, ligne 15)",
+  "statut": "a_ouvrir",
+  "cgu": "inconnue",
+  "preuves": [
+   15
+  ],
+  "payant": false,
+  "geste": "canal malt ouvert"
+ }
+}

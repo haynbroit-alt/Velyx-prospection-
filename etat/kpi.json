@@ -1,0 +1,275 @@
+{
+ "encaisse_eur": {
+  "valeur": 0,
+  "n": 0,
+  "nature": "valeur",
+  "definition": "Somme des actes encaissement du propriétaire : confirmée (github) et déclarée (session). Seul compteur d’argent, jamais additionné à un potentiel.",
+  "source": "registre/journal.jsonl",
+  "date": "2026-11-15T23:58:11.332Z",
+  "affichage": "0 €",
+  "detail": {
+   "confirmee_eur": 0,
+   "declaree_eur": 0
+  }
+ },
+ "depense_eur": {
+  "valeur": 0,
+  "n": 0,
+  "nature": "valeur",
+  "definition": "Somme des actes depense. Doit rester à 0 tant que l’encaissé est nul (mandat, ligne 14).",
+  "source": "registre/journal.jsonl",
+  "date": "2026-11-15T23:58:11.332Z",
+  "affichage": "0 €",
+  "detail": {
+   "bloquant": false
+  }
+ },
+ "envois": {
+  "valeur": 0,
+  "n": 0,
+  "nature": "valeur",
+  "definition": "Nombre d’actes envoi du propriétaire, par canal.",
+  "source": "registre/journal.jsonl",
+  "date": "2026-11-15T23:58:11.332Z",
+  "affichage": "0",
+  "detail": {
+   "par_canal": {}
+  }
+ },
+ "taux_reponse_positive_7j": {
+  "valeur": null,
+  "n": 0,
+  "nature": "valeur",
+  "definition": "Paris envoyés ayant reçu au plus 7 j après l’envoi une issue devis_demande, echange, commande ou paye, sur les paris envoyés dont l’échéance est passée. Inconnu sous 5.",
+  "source": "registre/journal.jsonl",
+  "date": "2026-11-15T23:58:11.332Z",
+  "affichage": "inconnu (n=0)"
+ },
+ "taux_engagement": {
+  "valeur": null,
+  "n": 0,
+  "nature": "valeur",
+  "definition": "Comme le taux de réponse positive, « question » comprise. Inconnu sous 5.",
+  "source": "registre/journal.jsonl",
+  "date": "2026-11-15T23:58:11.332Z",
+  "affichage": "inconnu (n=0)"
+ },
+ "taux_refus": {
+  "valeur": null,
+  "n": 0,
+  "nature": "valeur",
+  "definition": "Paris échus ayant reçu un refus au plus 7 j après l’envoi. Un refus ne compte jamais comme une réponse positive. Inconnu sous 5.",
+  "source": "registre/journal.jsonl",
+  "date": "2026-11-15T23:58:11.332Z",
+  "affichage": "inconnu (n=0)"
+ },
+ "commandes": {
+  "valeur": 0,
+  "n": 0,
+  "nature": "valeur",
+  "definition": "Paris ayant reçu une issue commande ou paye.",
+  "source": "registre/journal.jsonl",
+  "date": "2026-11-15T23:58:11.332Z",
+  "affichage": "0"
+ },
+ "gestes_en_attente": {
+  "valeur": 3,
+  "n": 3,
+  "nature": "goulot",
+  "definition": "Revues ouvertes (préalables, kits, propositions) et âge maximal en heures.",
+  "source": "registre/journal.jsonl",
+  "date": "2026-11-15T23:58:11.332Z",
+  "affichage": "3",
+  "detail": {
+   "age_max_h": 0,
+   "par_genre": {
+    "prealables": 2,
+    "kits": 1,
+    "propositions": 0,
+    "autres": 0
+   }
+  }
+ },
+ "latence_proprietaire_h": {
+  "valeur": null,
+  "n": 0,
+  "nature": "goulot",
+  "definition": "Médiane des heures entre la mise en revue et la validation, le rejet ou l’envoi. Inconnue sous 3 éléments.",
+  "source": "registre/journal.jsonl",
+  "date": "2026-11-15T23:58:11.332Z",
+  "affichage": "inconnu (n=0)",
+  "detail": {
+   "en_attente": [
+    {
+     "id": "R-2026-11-16-1",
+     "age_h": 0
+    },
+    {
+     "id": "R-2026-11-16-2",
+     "age_h": 0
+    },
+    {
+     "id": "R-2026-11-16-3",
+     "age_h": 0
+    }
+   ]
+  }
+ },
+ "cycles_sans_geste": {
+  "valeur": 1,
+  "n": 1,
+  "nature": "goulot",
+  "definition": "Cycles écrits depuis le dernier acte du propriétaire. À 5, nouvelles opportunités gelées (D8).",
+  "source": "registre/journal.jsonl",
+  "date": "2026-11-15T23:58:11.332Z",
+  "affichage": "1",
+  "detail": {
+   "dernier_geste": "2026-11-15T22:56:51.204Z",
+   "gel": false
+  }
+ },
+ "opportunites_perdues": {
+  "valeur": 0,
+  "n": 0,
+  "nature": "goulot",
+  "definition": "Revues devenues caduques avant l’envoi, par cause ; jamais en euros.",
+  "source": "registre/journal.jsonl",
+  "date": "2026-11-15T23:58:11.332Z",
+  "affichage": "0",
+  "detail": {
+   "par_cause": {}
+  }
+ },
+ "exclusions_par_controle": {
+  "valeur": null,
+  "n": 0,
+  "nature": "instrument",
+  "definition": "Fiches exclues ou en quarantaine par code de contrôle et par liste (dernier acte controle). Plus d’exclusions ne veut pas dire plus de qualité.",
+  "source": "registre/journal.jsonl",
+  "date": "2026-11-15T23:58:11.332Z",
+  "affichage": "non mesuré",
+  "detail": {
+   "par_liste": {}
+  }
+ },
+ "taux_erreur_echantillon": {
+  "valeur": null,
+  "n": 0,
+  "nature": "instrument",
+  "definition": "Fiches jugées fausses sur fiches revues (contrôle L3, tirage à graine fixe).",
+  "source": "registre/journal.jsonl",
+  "date": "2026-11-15T23:58:11.332Z",
+  "affichage": "non mesuré"
+ },
+ "fuites": {
+  "valeur": 0,
+  "n": 7539,
+  "nature": "instrument",
+  "definition": "Correspondances de l’antifuite dans le dépôt et etat/. « non mesuré par dictionnaire » si le dictionnaire est vide, jamais 0.",
+  "source": "velyx garde",
+  "date": "2026-11-15T23:58:11.332Z",
+  "affichage": "0",
+  "detail": {
+   "n_jetons": 7539
+  }
+ },
+ "sante_sources": {
+  "valeur": 0,
+  "n": 83,
+  "nature": "instrument",
+  "definition": "Taux de champs nuls du parseur codeur au dernier relevé, avec le nombre d’annonces lues.",
+  "source": "registre/journal.jsonl",
+  "date": "2026-11-15T23:58:11.332Z",
+  "affichage": "0 %",
+  "detail": {
+   "dernier_releve": "2026-11-15T23:56:01.947Z",
+   "rss_items": 35
+  }
+ },
+ "cout_cycle": {
+  "valeur": 5.2,
+  "n": 1,
+  "nature": "instrument",
+  "definition": "Durée du dernier cycle et requêtes émises, face aux plafonds.",
+  "source": "registre/journal.jsonl",
+  "date": "2026-11-15T23:58:11.332Z",
+  "affichage": "5,2 s",
+  "detail": {
+   "requetes": {
+    "codeur": 4,
+    "sirene": 0
+   },
+   "jugements": {
+    "demandes": 2,
+    "en_attente": 2
+   },
+   "plafonds": {
+    "codeur": 10,
+    "sirene": 400,
+    "duree_s": 600,
+    "jugements": 5,
+    "nouvelles_opportunites": 1,
+    "passages_jour": 3
+   }
+  }
+ },
+ "concurrence_a_l_envoi": {
+  "valeur": null,
+  "n": 0,
+  "nature": "instrument",
+  "definition": "Offres de l’annonce liée à la dernière lecture avant l’envoi, puis à envoi + 7 j.",
+  "source": "etat/series",
+  "date": "2026-11-15T23:58:11.332Z",
+  "affichage": "aucun envoi suivi",
+  "detail": {
+   "suivis": []
+  }
+ },
+ "demande_cible_14j": {
+  "valeur": 2,
+  "n": 2,
+  "nature": "instrument",
+  "definition": "Annonces publiées depuis 14 j au plus, tag Prospection commerciale, Télémarketing ou Data entry, avec la médiane de leurs offres.",
+  "source": "etat/series",
+  "date": "2026-11-15T23:58:11.332Z",
+  "affichage": "2",
+  "detail": {
+   "offres_mediane": 3.5,
+   "n_offres": 2
+  }
+ },
+ "brier_previsions": {
+  "valeur": null,
+  "n": 0,
+  "nature": "instrument",
+  "definition": "Moyenne de (p − issue)² sur les prévisions résolues par une lecture réelle. Publiée dès 10 ; on peut être bien calibré avec 0 €.",
+  "source": "registre/journal.jsonl",
+  "date": "2026-11-15T23:58:11.332Z",
+  "affichage": "inconnu (n=0)",
+  "detail": {
+   "non_resolues": 0,
+   "echues_sans_lecture": 0
+  }
+ },
+ "ratio_moteur": {
+  "valeur": null,
+  "n": 0,
+  "nature": "goulot",
+  "definition": "Commits touchant src/ sur 14 j divisés par max(envois sur 14 j, 1). Au-dessus de 5 sans envoi : constat.",
+  "source": "git log et registre",
+  "date": "2026-11-15T23:58:11.332Z",
+  "affichage": "non mesuré",
+  "detail": {
+   "envois_14j": 0
+  }
+ },
+ "cycles_manques": {
+  "valeur": 1,
+  "n": 2,
+  "nature": "instrument",
+  "definition": "Jours sans acte cycle sur les 30 derniers jours (depuis la première ligne du registre).",
+  "source": "registre/journal.jsonl",
+  "date": "2026-11-15T23:58:11.332Z",
+  "affichage": "1"
+ }
+}

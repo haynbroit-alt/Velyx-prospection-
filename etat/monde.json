@@ -1,0 +1,576 @@
+{
+ "version": 1,
+ "maj_le": null,
+ "croyances": [
+  {
+   "id": "B01",
+   "nature": "contrainte",
+   "enonce": "Envoyer une offre sur codeur.com exige un abonnement d’au moins 31,90 € HT par 30 jours, plus 4 % de commission (minimum 5 € HT) : page publique des tarifs lue le 15/11 (aveu ligne 13), qui réfute « inscription gratuite ». Test : relecture de la page chaque dimanche ; une page changée est une contradiction lue à la source.",
+   "niveau": "observee",
+   "preuves": [
+    13
+   ],
+   "test": {
+    "sujet": "page:tarifs-codeur-com",
+    "mesure": "identique",
+    "op": "==",
+    "seuil": 1,
+    "min_n": 1,
+    "jours_distincts": 1
+   },
+   "infirmation": null,
+   "revisee_le": null,
+   "etiquette": null,
+   "source": "codeur:/pages/tarifs-codeur-com",
+   "trace": {
+    "confirmations": [],
+    "contradictions": [],
+    "consecutives": 0,
+    "infirmations": 0,
+    "citations": [],
+    "issues": []
+   }
+  },
+  {
+   "id": "B02",
+   "nature": "contrainte",
+   "enonce": "0 € avant le premier encaissement, puis toute dépense en revue humaine (mandat du propriétaire, ligne 14, et politique.json). Seul un nouvel acte mandat du propriétaire la modifie.",
+   "niveau": "observee",
+   "preuves": [
+    14,
+    17,
+    18
+   ],
+   "test": null,
+   "infirmation": null,
+   "revisee_le": null,
+   "etiquette": "mandat",
+   "source": null,
+   "trace": {
+    "confirmations": [],
+    "contradictions": [],
+    "consecutives": 0,
+    "infirmations": 0,
+    "citations": [],
+    "issues": []
+   }
+  },
+  {
+   "id": "B03",
+   "nature": "marche",
+   "enonce": "La prospection commerciale et le télémarketing sont peu concurrencés sur codeur.com : médiane de 5 offres le 15/11 (169 annonces lues, une seule date) contre 100 à 190 en développement. Observée si la médiane reste ≤ 10 (n ≥ 5) à une seconde date, parseur sain ; contestée puis réfutée si elle dépasse 15 deux lectures de suite.",
+   "niveau": "hypothese",
+   "preuves": [
+    1,
+    11
+   ],
+   "test": {
+    "sujet": "segment:prospection",
+    "mesure": "mediane_offres",
+    "op": "<=",
+    "seuil": 10,
+    "min_n": 5,
+    "jours_distincts": 2
+   },
+   "infirmation": {
+    "sujet": "segment:prospection",
+    "mesure": "mediane_offres",
+    "op": ">",
+    "seuil": 15,
+    "min_n": 5,
+    "consecutifs": 2
+   },
+   "revisee_le": null,
+   "etiquette": null,
+   "source": null,
+   "trace": {
+    "confirmations": [
+     {
+      "fait": "fait:segment:prospection:mediane_offres:2026-11-16",
+      "jour": "2026-11-16",
+      "ligne": 27
+     }
+    ],
+    "contradictions": [],
+    "consecutives": 0,
+    "infirmations": 0,
+    "citations": [],
+    "issues": []
+   }
+  },
+  {
+   "id": "B04",
+   "nature": "marche",
+   "enonce": "La concurrence arrive dans les premières heures : 3 offres sur 4 en moins de 2 h pour 492531, 15 sur 15 pour 492955 (2 pages détail lues le 15/11, hors registre). Observée si la médiane de devis_2h ÷ offres atteint 0,5 sur au moins 20 annonces suivies ; c’est la seule condition d’un second passage quotidien.",
+   "niveau": "hypothese",
+   "preuves": [],
+   "test": {
+    "sujet": "suivis",
+    "mesure": "mediane_part_devis_2h",
+    "op": ">=",
+    "seuil": 0.5,
+    "min_n": 20,
+    "jours_distincts": 2
+   },
+   "infirmation": null,
+   "revisee_le": null,
+   "etiquette": null,
+   "source": null,
+   "trace": {
+    "confirmations": [],
+    "contradictions": [],
+    "consecutives": 0,
+    "infirmations": 0,
+    "citations": [],
+    "issues": []
+   }
+  },
+  {
+   "id": "B05",
+   "nature": "commerciale",
+   "enonce": "Une partie des acheteurs de prospection achète d’abord « qui appeler » : au moins 3 formulations dans 31 annonces lues (« base de 150 entreprises du BTP », micro-entreprises IT d’Île-de-France, collecte et enrichissement de fiches). Observée si la famille données fait au moins 20 % des annonces de prospection sur 4 semaines ; pari gagné seulement sur une commande de liste.",
+   "niveau": "dite_par_client",
+   "preuves": [
+    11
+   ],
+   "test": {
+    "sujet": "segment:prospection",
+    "mesure": "part_donnees_28j",
+    "op": ">=",
+    "seuil": 0.2,
+    "min_n": 10,
+    "jours_distincts": 2,
+    "elevation_seule": true
+   },
+   "infirmation": null,
+   "revisee_le": null,
+   "etiquette": null,
+   "source": null,
+   "issues_gagnantes": [
+    "commande",
+    "paye"
+   ],
+   "trace": {
+    "confirmations": [],
+    "contradictions": [],
+    "consecutives": 0,
+    "infirmations": 0,
+    "citations": [],
+    "issues": []
+   }
+  },
+  {
+   "id": "B06",
+   "nature": "commerciale",
+   "enonce": "Une réponse accompagnée d’un échantillon réel construit pour la demande obtient une issue positive (devis demandé, échange, commande) en 7 jours au plus. Aucune preuve (0 envoi). Pari gagné dès 1 issue positive ; réfutée après 0 issue positive sur 5 envois ; « question » compte pour l’engagement seulement.",
+   "niveau": "hypothese",
+   "preuves": [],
+   "test": null,
+   "infirmation": {
+    "sujet": "paris",
+    "mesure": "issues_positives",
+    "op": "==",
+    "seuil": 0,
+    "min_n": 5,
+    "consecutifs": 1
+   },
+   "revisee_le": null,
+   "etiquette": null,
+   "source": null,
+   "trace": {
+    "confirmations": [],
+    "contradictions": [],
+    "consecutives": 0,
+    "infirmations": 0,
+    "citations": [],
+    "issues": []
+   }
+  },
+  {
+   "id": "B07",
+   "nature": "canal",
+   "enonce": "Le propriétaire peut utiliser un canal à 0 € : ComeUp (publication gratuite, 20 % de commission), Malt (profil gratuit, environ 5 à 10 %) ou l’e-mail direct (ligne 15, sources secondaires). Observée quand le propriétaire déclare un canal ouvert et que ses CGU sont lues avec citation vérifiée.",
+   "niveau": "hypothese",
+   "preuves": [
+    15
+   ],
+   "test": null,
+   "infirmation": null,
+   "revisee_le": null,
+   "etiquette": null,
+   "source": null,
+   "trace": {
+    "confirmations": [],
+    "contradictions": [],
+    "consecutives": 0,
+    "infirmations": 0,
+    "citations": [],
+    "issues": []
+   }
+  },
+  {
+   "id": "B08",
+   "nature": "contrainte",
+   "enonce": "Les CGU de codeur.com permettent de contacter un client hors de la plateforme. Aucune preuve : la page des conditions d’utilisation n’a pas été lue. Test : 1 lecture et un jugement lire_cgu aux citations vérifiées ; si elles l’interdisent, l’e-mail direct vers les clients codeur est exclu (R-23).",
+   "niveau": "hypothese",
+   "preuves": [],
+   "test": {
+    "sujet": "cgu:codeur",
+    "mesure": "contact_hors_plateforme",
+    "op": "==",
+    "seuil": "autorise",
+    "min_n": 1,
+    "jours_distincts": 1
+   },
+   "infirmation": {
+    "sujet": "cgu:codeur",
+    "mesure": "contact_hors_plateforme",
+    "op": "==",
+    "seuil": "interdit",
+    "min_n": 1,
+    "consecutifs": 1
+   },
+   "revisee_le": null,
+   "etiquette": "inconnu",
+   "source": "codeur:/pages/termes-et-conditions-d-utilisation",
+   "trace": {
+    "confirmations": [],
+    "contradictions": [],
+    "consecutives": 0,
+    "infirmations": 0,
+    "citations": [],
+    "issues": []
+   }
+  },
+  {
+   "id": "B09",
+   "nature": "proprietaire",
+   "enonce": "Le propriétaire a un statut pour facturer (micro-entreprise ou autre). Sans statut, un oui ne s’encaisse pas, mais la préparation n’est pas bloquée. Tranchée par un geste « statut … » ; une seule fiche de préalable.",
+   "niveau": "hypothese",
+   "preuves": [],
+   "test": null,
+   "infirmation": null,
+   "revisee_le": null,
+   "etiquette": "inconnu",
+   "source": null,
+   "trace": {
+    "confirmations": [],
+    "contradictions": [],
+    "consecutives": 0,
+    "infirmations": 0,
+    "citations": [],
+    "issues": []
+   }
+  },
+  {
+   "id": "B10",
+   "nature": "proprietaire",
+   "enonce": "Le goulot est le geste du propriétaire, pas le moteur : 2 brouillons prêts le 15/11 et 0 envoi ; GALILÉE, CORTEX et LAVOISIER ont tout démontré en simulation et encaissé 0 €. Confirmée si la latence du propriétaire dépasse 48 h sur 3 éléments ; infirmée si sa médiane passe sous 24 h.",
+   "niveau": "observee",
+   "preuves": [
+    4,
+    5,
+    6,
+    7
+   ],
+   "test": {
+    "sujet": "proprietaire",
+    "mesure": "latence_mediane_h",
+    "op": ">",
+    "seuil": 48,
+    "min_n": 3,
+    "jours_distincts": 2
+   },
+   "infirmation": {
+    "sujet": "proprietaire",
+    "mesure": "latence_mediane_h",
+    "op": "<",
+    "seuil": 24,
+    "min_n": 3,
+    "consecutifs": 1
+   },
+   "revisee_le": null,
+   "etiquette": null,
+   "source": null,
+   "trace": {
+    "confirmations": [],
+    "contradictions": [],
+    "consecutives": 0,
+    "infirmations": 0,
+    "citations": [],
+    "issues": []
+   }
+  },
+  {
+   "id": "B11",
+   "nature": "instrument",
+   "enonce": "opposition_diffusion_commerciale = vrai signale une opposition à la prospection (vrai sur 246 des 1 111 fiches IT lues) ; statut_diffusion vaut « O » partout et ne filtre rien. À confirmer par la documentation de l’API lue par un humain ; si elle donne un autre sens, réintégration seulement après validation du propriétaire.",
+   "niveau": "hypothese",
+   "preuves": [
+    16
+   ],
+   "test": null,
+   "infirmation": null,
+   "revisee_le": null,
+   "etiquette": "precaution",
+   "source": null,
+   "trace": {
+    "confirmations": [],
+    "contradictions": [],
+    "consecutives": 0,
+    "infirmations": 0,
+    "citations": [],
+    "issues": []
+   }
+  },
+  {
+   "id": "B12",
+   "nature": "instrument",
+   "enonce": "Un CA publié égal à 0 avec un résultat non nul signifie un compte de résultat non publié, pas une activité nulle (123 retenues IT à CA 0, dont 109 à résultat non nul). Confirmée si le propriétaire vérifie 3 fiches ; la règle « dormante » est abandonnée.",
+   "niveau": "hypothese",
+   "preuves": [],
+   "test": null,
+   "infirmation": null,
+   "revisee_le": null,
+   "etiquette": null,
+   "source": null,
+   "trace": {
+    "confirmations": [],
+    "contradictions": [],
+    "consecutives": 0,
+    "infirmations": 0,
+    "citations": [],
+    "issues": []
+   }
+  },
+  {
+   "id": "B13",
+   "nature": "instrument",
+   "enonce": "L’API SIRENE renvoie 25 résultats par page, sans filtre sur la date de création ; total_results est plafonné à 10 000 et la page 401 renvoie HTTP 400 ; les filtres categorie_entreprise=PME et est_rge fonctionnent (mesures du 15/11). Contredite par un total supérieur à 10 000.",
+   "niveau": "observee",
+   "preuves": [
+    3,
+    8
+   ],
+   "test": {
+    "sujet": "sirene:sondes",
+    "mesure": "total_max",
+    "op": "<=",
+    "seuil": 10000,
+    "min_n": 1,
+    "jours_distincts": 2
+   },
+   "infirmation": {
+    "sujet": "sirene:sondes",
+    "mesure": "total_max",
+    "op": ">",
+    "seuil": 10000,
+    "min_n": 1,
+    "consecutifs": 1
+   },
+   "revisee_le": null,
+   "etiquette": null,
+   "source": null,
+   "trace": {
+    "confirmations": [],
+    "contradictions": [],
+    "consecutives": 0,
+    "infirmations": 0,
+    "citations": [],
+    "issues": []
+   }
+  },
+  {
+   "id": "B14",
+   "nature": "instrument",
+   "enonce": "Les lectures codeur sont saines : 169 annonces, 0 % de champs nuls ; RSS de 35 items sur environ 52 h, pubDate absolue, guid stable. Contredite par une page à 0 fiche ou plus de 20 % de champs nuls : aveu et suspension des faits agrégés, jamais « marché vide ».",
+   "niveau": "observee",
+   "preuves": [
+    1
+   ],
+   "test": {
+    "sujet": "parseur:codeur",
+    "mesure": "sain",
+    "op": "==",
+    "seuil": 1,
+    "min_n": 0,
+    "jours_distincts": 2
+   },
+   "infirmation": null,
+   "revisee_le": null,
+   "etiquette": null,
+   "source": null,
+   "trace": {
+    "confirmations": [
+     {
+      "fait": "fait:parseur:codeur:sain:2026-11-16",
+      "jour": "2026-11-16",
+      "ligne": 26
+     }
+    ],
+    "contradictions": [],
+    "consecutives": 0,
+    "infirmations": 0,
+    "citations": [],
+    "issues": []
+   }
+  },
+  {
+   "id": "B15",
+   "nature": "instrument",
+   "enonce": "Le registre public ne contient aucune donnée nominative : chaîne intacte, 0 correspondance au scan structurel hors champs d’empreinte. Infirmée par une seule correspondance de l’antifuite, qui bloque le push.",
+   "niveau": "observee",
+   "preuves": [],
+   "test": {
+    "sujet": "garde",
+    "mesure": "correspondances",
+    "op": "==",
+    "seuil": 0,
+    "min_n": 1,
+    "jours_distincts": 2
+   },
+   "infirmation": {
+    "sujet": "garde",
+    "mesure": "correspondances",
+    "op": ">",
+    "seuil": 0,
+    "min_n": 1,
+    "consecutifs": 1
+   },
+   "revisee_le": null,
+   "etiquette": null,
+   "source": null,
+   "trace": {
+    "confirmations": [],
+    "contradictions": [],
+    "consecutives": 0,
+    "infirmations": 0,
+    "citations": [],
+    "issues": []
+   }
+  },
+  {
+   "id": "B16",
+   "nature": "instrument",
+   "enonce": "Les deux brouillons du 15/11 portaient des chiffres non contrôlés : IT 862 sociétés dont 168 opposées, soit 694 nettes ; BTP 1 119 fiches « complètes » dont 255 aux comptes de plus de 3 ans, soit 864, sur une lecture partielle. Brouillons bloqués, paris clos « caduc » à la migration.",
+   "niveau": "observee",
+   "preuves": [
+    2,
+    3,
+    16
+   ],
+   "test": null,
+   "infirmation": null,
+   "revisee_le": null,
+   "etiquette": null,
+   "source": null,
+   "trace": {
+    "confirmations": [],
+    "contradictions": [],
+    "consecutives": 0,
+    "infirmations": 0,
+    "citations": [],
+    "issues": []
+   }
+  },
+  {
+   "id": "B17",
+   "nature": "marche",
+   "enonce": "Une annonce de prospection reste ouverte au moins 7 jours (indices biaisés du 15/11 : 152 ouvertes, 15 en cours, 2 fermées sur 169). Mesurée par l’âge à la dernière lecture « Ouvert » avant fermeture, borne basse ; tranchée à partir de 10 fermetures observées.",
+   "niveau": "hypothese",
+   "preuves": [
+    1
+   ],
+   "test": {
+    "sujet": "fermetures",
+    "mesure": "mediane_ouverture_min_h",
+    "op": ">=",
+    "seuil": 168,
+    "min_n": 10,
+    "jours_distincts": 2
+   },
+   "infirmation": null,
+   "revisee_le": null,
+   "etiquette": null,
+   "source": null,
+   "trace": {
+    "confirmations": [],
+    "contradictions": [],
+    "consecutives": 0,
+    "infirmations": 0,
+    "citations": [],
+    "issues": []
+   }
+  },
+  {
+   "id": "B18",
+   "nature": "commerciale",
+   "enonce": "Un dirigeant de 62 ans ou plus est un indice de transmission, pas une intention de vendre. Aucune donnée de cession ; ce signal n’apparaît dans aucune des 31 annonces lues. Tranchée seulement par un retour client.",
+   "niveau": "hypothese",
+   "preuves": [
+    9
+   ],
+   "test": null,
+   "infirmation": null,
+   "revisee_le": null,
+   "etiquette": null,
+   "source": null,
+   "trace": {
+    "confirmations": [],
+    "contradictions": [],
+    "consecutives": 0,
+    "infirmations": 0,
+    "citations": [],
+    "issues": []
+   }
+  },
+  {
+   "id": "B19",
+   "nature": "commerciale",
+   "enonce": "Pour le courtier BTP, les entreprises récentes sont la priorité : c’est le critère écrit en premier dans l’annonce 492531. Confirmée si le client répond sur ce segment, infirmée s’il le rejette.",
+   "niveau": "dite_par_client",
+   "preuves": [
+    3
+   ],
+   "test": null,
+   "infirmation": null,
+   "revisee_le": null,
+   "etiquette": null,
+   "source": null,
+   "trace": {
+    "confirmations": [],
+    "contradictions": [],
+    "consecutives": 0,
+    "infirmations": 0,
+    "citations": [],
+    "issues": []
+   }
+  },
+  {
+   "id": "B20",
+   "nature": "commerciale",
+   "enonce": "Leçon LAVOISIER : un site sans audience n’amène pas de visiteurs ciblés ; il ne vaut que comme pièce de preuve jointe à un canal. Infirmée si un client cite la page.",
+   "niveau": "hypothese",
+   "preuves": [],
+   "test": null,
+   "infirmation": null,
+   "revisee_le": null,
+   "etiquette": null,
+   "source": null,
+   "trace": {
+    "confirmations": [],
+    "contradictions": [],
+    "consecutives": 0,
+    "infirmations": 0,
+    "citations": [],
+    "issues": []
+   }
+  }
+ ],
+ "references": {
+  "/pages/termes-et-conditions-d-utilisation": {
+   "sha256": "f510439fdaa89052918e018c6b7c828cab3d10935b82ed328b215e25021e5f01",
+   "lu_le": "2026-11-15T23:55:57.178Z"
+  }
+ }
+}

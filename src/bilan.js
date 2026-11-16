@@ -84,7 +84,8 @@ export function brier(resolutions) {
   return arrondi(ok.reduce((s, r) => s + (r.p - r.issue) ** 2, 0) / ok.length);
 }
 
-const idPrevision = (l) => (typeof l.id === 'string' && l.id ? l.id : `L${l.n}`);
+// Une prévision de strategie.anticiper n'a pas d'id : sa clé (CLES.prevision) l'identifie, comme dans noterPrevisions.
+const idPrevision = (l) => (typeof l.id === 'string' && l.id ? l.id : typeof l.cle === 'string' && l.cle ? l.cle : `L${l.n}`);
 
 /**
  * Prévisions du registre et leur résolution. Une prévision {sujet (id d'annonce), mesure, op, seuil, p, horizon_h} n'est
@@ -101,7 +102,8 @@ export function resoudrePrevisions(registre, series = [], horloge = creerHorloge
     if (existantes.has(id)) { resolues.push({ prevision: id, p, issue: existantes.get(id).issue, source: existantes.get(id).source }); continue; }
     const echeance = t(l.emise_le ?? l.date) + Number(l.horizon_h) * 3.6e6;
     if (!Number.isFinite(echeance) || maintenant < echeance) { en_attente++; continue; }
-    const point = (series ?? []).filter((s) => String(s?.id) === String(l.sujet) && t(s.t) >= echeance).sort((a, b) => t(a.t) - t(b.t))[0];
+    const sujet = String(l.sujet).replace(/^annonce:/, '');
+    const point = (series ?? []).filter((s) => String(s?.id) === sujet && t(s.t) >= echeance).sort((a, b) => t(a.t) - t(b.t))[0];
     if (!point || !Object.hasOwn(point, l.mesure)) { echues_sans_lecture++; continue; }
     let vrai;
     try { vrai = evaluerOp(l.op ?? '==', point[l.mesure], l.seuil); } catch { echues_sans_lecture++; continue; }

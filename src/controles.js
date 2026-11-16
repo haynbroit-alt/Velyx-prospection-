@@ -301,7 +301,7 @@ function mulberry32(a) {
 }
 
 /**
- * n fiches tirées par Fisher-Yates sur mulberry32(empreinte(graine)). Reproductible : même liste (quel que soit son
+ * n fiches tirées par mélange sans remise sur mulberry32(empreinte(graine)). Reproductible : même liste (quel que soit son
  * ordre, elle est d'abord triée par SIREN) et même graine, même tirage.
  */
 export function echantillonControle(liste, graine, n = 10) {

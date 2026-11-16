@@ -1,0 +1,17 @@
+{
+ "jour": "2026-11-17",
+ "suivis": [
+  {
+   "id": "492760",
+   "motif": "donnees"
+  }
+ ],
+ "candidats": [],
+ "pages": [
+  {
+   "canal": "codeur",
+   "chemin": "/pages/termes-et-conditions-d-utilisation"
+  }
+ ],
+ "sondes": []
+}

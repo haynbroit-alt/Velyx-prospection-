@@ -1,0 +1,11 @@
+{
+ "finalite": "prospection B2B sur demande publiée",
+ "base_legale": "intérêt légitime (à documenter par le propriétaire)",
+ "sources": [
+  "registre SIRENE/RNE via recherche-entreprises.api.gouv.fr (données publiques)",
+  "annonces publiques de www.codeur.com"
+ ],
+ "conservation_jours": 90,
+ "n_oppositions": 0,
+ "contact": null
+}

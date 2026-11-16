@@ -367,7 +367,8 @@ export function decider(file, etat = {}) {
 
   // D0 : un constat bloquant ne laisse que réparation et aveu.
   if (constats_bloquants.length) {
-    pousser('notifier', 'constats', { codes: [...new Set(constats_bloquants.map((c) => c.code ?? String(c)))].sort() },
+    const codes = [...new Set(constats_bloquants.map((c) => c.code ?? String(c)))].sort();
+    pousser('notifier', 'constats', { codes, texte: `VELYX ${jour.slice(8, 10)}/${jour.slice(5, 7)} : réparation nécessaire (${codes.join(', ')}) ; aucune autre action.`.slice(0, 300) },
       `D0 : constat bloquant (${constats_bloquants.map((c) => c.code ?? c).join(', ')}) ; seuls la réparation et l’aveu sont permis`);
     return finaliser(brutes, cycle);
   }
@@ -421,7 +422,8 @@ export function decider(file, etat = {}) {
   let restant = SEUILS.nouvelles_max - propsDuJour - nouvelles_aujourdhui;
   if (cycles_sans_geste >= SEUILS.cycles_gel) { motifs.push(`D8 : ${cycles_sans_geste} cycles sans geste du propriétaire, veille seule`); restant = 0; }
   if (nProps >= SEUILS.wip_max) {
-    pousser('notifier', 'relance', { motif: 'propositions en attente', propositions: nProps }, `D3 : ${nProps} propositions ouvertes, aucune nouvelle ; relance par la notification`);
+    pousser('notifier', 'relance', { motif: 'propositions en attente', propositions: nProps,
+      texte: `${nProps} propositions attendent votre geste ; aucune nouvelle tant qu’elles restent ouvertes.` }, `D3 : ${nProps} propositions ouvertes, aucune nouvelle ; relance par la notification`);
     restant = 0;
   }
   if (restant <= 0 && !motifs.length && nProps < SEUILS.wip_max) motifs.push('D4 : une nouvelle opportunité par jour au plus');

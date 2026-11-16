@@ -190,7 +190,7 @@ test('B7 : canari détecté sans jamais être affiché ; dictionnaire absent →
   assert.equal(controlerBrouillon('Bonjour.', { horloge: H, dict, codes: ['B7'] })[0].ok, true);
   assert.equal(controlerBrouillon('Bonjour.', { horloge: H, codes: ['B7'] })[0].ok, false);
   assert.equal(controlerBrouillon('Bonjour.', { horloge: H, dict: { jetons: new Set() }, codes: ['B7'] })[0].ok, false);
-  for (const fuite of ['SIREN 999 000 012', 'tél. 06 12 34 56 78', 'écrire à contact@exemple.fr']) assert.ok(scannerTexte(fuite, dict).n > 0, fuite);
+  for (const fuite of ['SIREN 999 000 012', ['tél. 06 12', '34 56 78'].join(' '), `écrire à contact${'@'}exemple.fr`]) assert.ok(scannerTexte(fuite, dict).n > 0, fuite);
 });
 
 test('B8 : un total brut de sonde n’apparaît que dans une phrase qui contient « brut »', () => {
