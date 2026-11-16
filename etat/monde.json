@@ -1,6 +1,6 @@
 {
  "version": 1,
- "maj_le": null,
+ "maj_le": "2026-11-16T03:15:59.408Z",
  "croyances": [
   {
    "id": "B01",
@@ -212,8 +212,10 @@
    "id": "B08",
    "nature": "contrainte",
    "enonce": "Les CGU de codeur.com permettent de contacter un client hors de la plateforme. Aucune preuve : la page des conditions d’utilisation n’a pas été lue. Test : 1 lecture et un jugement lire_cgu aux citations vérifiées ; si elles l’interdisent, l’e-mail direct vers les clients codeur est exclu (R-23).",
-   "niveau": "hypothese",
-   "preuves": [],
+   "niveau": "refutee",
+   "preuves": [
+    54
+   ],
    "test": {
     "sujet": "cgu:codeur",
     "mesure": "contact_hors_plateforme",
@@ -230,14 +232,22 @@
     "min_n": 1,
     "consecutifs": 1
    },
-   "revisee_le": null,
+   "revisee_le": "2026-11-16T03:15:59.408Z",
    "etiquette": "inconnu",
    "source": "codeur:/pages/termes-et-conditions-d-utilisation",
    "trace": {
     "confirmations": [],
-    "contradictions": [],
-    "consecutives": 0,
-    "infirmations": 0,
+    "contradictions": [
+     {
+      "id": "X-B08-2026-11-16",
+      "fait": "fait:cgu:codeur:contact_hors_plateforme:2026-11-16",
+      "jour": "2026-11-16",
+      "infirme": true,
+      "ligne": 54
+     }
+    ],
+    "consecutives": 1,
+    "infirmations": 1,
     "citations": [],
     "issues": []
    }

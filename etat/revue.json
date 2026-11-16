@@ -1,8 +1,9 @@
 {
- "n_ouvertes": 3,
+ "n_ouvertes": 4,
  "par_type": {
   "prealable": 2,
-  "kit_canal": 1
+  "kit_canal": 1,
+  "proposition": 1
  },
- "age_max_h": 0
+ "age_max_h": 3.3
 }

@@ -103,7 +103,7 @@ Je suis [NOM DU PROPRIÉTAIRE] ([STATUT ET COORDONNÉES DU PROPRIÉTAIRE]). Je v
 
 Une entreprise du bâtiment doit justifier d’une assurance décennale à l’ouverture de tout chantier (C. assurances, art. L241-1) : celles qui viennent d’être immatriculées cherchent donc leur premier contrat.
 
-Dans le département {{echantillon.departement}}, {{au_moins}}{{compte.retenues}} entreprises du bâtiment ont été immatriculées depuis moins de {{param.creation_moins_de_mois}} mois, d’après le registre officiel des entreprises (INSEE, base Sirene ; INPI, registre national des entreprises) lu le {{lu_le}} ; {{compte.par_signal.rge}} d’entre elles sont qualifiées RGE. Les entreprises qui s’opposent à la prospection commerciale et celles dont la diffusion est partielle sont exclues.
+Dans le département {{echantillon.departement}}, {{au_moins}}{{compte.retenues}} sociétés du bâtiment immatriculées depuis moins de {{param.creation_moins_de_mois}} mois peuvent être prospectées, d’après le registre officiel des entreprises (INSEE, base Sirene ; INPI, registre national des entreprises) lu le {{lu_le}}. {{exclusions}}
 
 Voici un échantillon de {{echantillon.n}} lignes, sans nom de dirigeant :
 
@@ -290,6 +290,13 @@ export function remplir(gabarit, d = {}) {
         if (!sous) inconnu(ph);
         const lecture = exigerLecture(ph), v = nombre(ph, lire(d.compte, sous), 'compte');
         return lecture.complet === false && !/au moins\s*$/i.test(out) ? `au moins ${v}` : v;
+      }
+      case 'exclusions': {
+        // Nombre d'écartées par les contrôles, seulement s'il est connu pour cette liste (acte cible du registre).
+        if (sous) inconnu(ph);
+        const n = d.compte?.exclues;
+        if (typeof n === 'number' && Number.isFinite(n) && n > 0) return `Les contrôles en ont écarté ${nombre('compte.exclues', n, 'compte')} autres, surtout parce qu’elles s’opposent à la prospection commerciale : les contacter vous exposerait. Aucune ne figure dans ce fichier.`;
+        return 'Les entreprises qui s’opposent à la prospection commerciale et celles dont la diffusion est partielle sont exclues.';
       }
       case 'param': if (!sous) inconnu(ph); return nombre(ph, lire(d.params, sous), 'param');
       case 'sonde': {

@@ -582,8 +582,11 @@ export function brouillonCourtiers(ctx, { departement = null } = {}) {
   for (const e of src.fiches) for (const x of e.signaux ?? []) parSignal[x.code] = (parSignal[x.code] ?? 0) + 1;
   const complet = src.echantillon ? false : src.contenu.complet === true;
   const lignes = echantillonMinimise(src.fiches, { horloge: ctx.horloge, dict: ctx.dict });
+  // Nombre d'écartées : seulement s'il est consigné au registre pour CETTE liste (acte cible), sinon phrase générique.
+  const acteCible = src.echantillon ? null : ctx.registre?.de?.('cible')?.filter?.((l) => l.fichier_prive === src.fichier)?.at?.(-1) ?? null;
+  const exclues = Number.isInteger(acteCible?.compte?.exclues) ? acteCible.compte.exclues : null;
   const p = preparer('courtiers-construction', {
-    compte: { retenues: src.fiches.length, par_signal: parSignal }, params: chiffresRecette(rec), limites: rec.limites,
+    compte: { retenues: src.fiches.length, par_signal: parSignal, ...(exclues !== null ? { exclues } : {}) }, params: chiffresRecette(rec), limites: rec.limites,
     lecture: { complet, lu_le: src.contenu.lu_le }, echantillon: { lignes, departement: String(dep) },
     sources: { compte: `${src.fichier} (fiches contrôlées, oppositions exclues)`, param: 'etat/recettes/btp-creations-zone.json', echantillon: src.fichier },
   }, { horloge: ctx.horloge, dict: ctx.dict });

@@ -318,3 +318,19 @@ test('R-10 : dictionnaire indisponible (null) → texte libre refusé hors des a
   assert.throws(() => avec.copie().ajouter({ type: 'aveu', motif: 'M. Canarix' }), /jeton du dictionnaire/);
   assert.throws(() => sans.copie().ajouter({ type: 'aveu', motif: 'texte' }), /sans dictionnaire/);
 });
+
+test('un pari dont la revue a été remplacée n’est plus « ouvert » (pas d’envoi d’une version périmée)', async () => {
+  const { default: os } = await import('node:os');
+  const { default: fs } = await import('node:fs');
+  const { default: path } = await import('node:path');
+  const { Registre } = await import('../src/registre.js');
+  const f = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'velyx-caduc-')), 'j.jsonl');
+  const reg = new Registre(f);
+  const pari = (id) => ({ type: 'pari', id, hypothese: 'h', geste_proprietaire: 'g', critere_succes: 's', critere_arret: 'a', echeance: 'envoi + 7 jours' });
+  reg.ajouter(pari('P-R-2026-11-16-4'));
+  reg.ajouter(pari('P-R-2026-11-16-5'));
+  reg.ajouter({ type: 'decision', action: 'invalider_revue', verdict: 'autorise', regle: 'R-28', revue: 'R-2026-11-16-4', motif: 'remplacee', cle: 'caduque:R-2026-11-16-4' });
+  const st = Object.fromEntries(new Registre(f).etat().paris.map((p) => [p.id, p.statut]));
+  assert.equal(st['P-R-2026-11-16-4'], 'caduc');
+  assert.equal(st['P-R-2026-11-16-5'], 'ouvert');
+});
