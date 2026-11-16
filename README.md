@@ -1,70 +1,60 @@
-# VELYX — prospection par la preuve
+# VELYX — agent économique autonome, prospection par la preuve
 
-VELYX part d'une **demande réelle déjà publiée** par un client, construit **avant de répondre** la preuve qu'on sait
-y répondre (un échantillon tiré du registre officiel des entreprises), et consigne chaque proposition comme un **pari**
-avec un critère d'arrêt. Le seul compteur d'argent est l'encaissement, saisi par le propriétaire avec sa preuve.
+VELYX lit chaque jour la **demande réelle publiée**, construit **avant de répondre** la preuve qu'il sait y répondre
+(un échantillon tiré du registre officiel des entreprises), et prépare l'offre jusqu'au dernier geste. Le
+propriétaire valide, envoie, encaisse. Le seul compteur d'argent est l'encaissement, avec sa preuve.
+
+Mandat permanent : **0 € avant le premier encaissement** (`politique.json`). Aucun message, prix, publication,
+inscription ni dépense sans la validation du propriétaire. Aucune donnée nominative dans ce dépôt public.
+
+## La boucle (une étape = une fonction testée, sur données réelles)
+
+| Étape | Ce que fait VELYX | Module |
+|---|---|---|
+| OBSERVER | lit codeur.com (liste, RSS, détail) et le registre SIRENE/RNE, sous budget | `src/sources/` |
+| COMPRENDRE | faits datés, croyances du modèle du monde | `src/monde.js` |
+| CONFRONTER / HYPOTHÈSES | contradiction écrite ; l'instrument est suspecté avant le monde | `src/monde.js` |
+| ANTICIPER | vitesse d'offres entre relevés, prévisions notées à l'échéance | `src/strategie.js` |
+| PRIORISER / DÉCIDER (CEO) | ordre sur des faits, aucun euro inventé | `src/strategie.js` |
+| DÉCIDER (Risk Agent) | politique fermée : autorisé, revue humaine ou interdit | `src/risque.js` |
+| SIMULER | exécution à blanc et contrôles (oppositions, holdings, filiales, comptes périmés…) | `src/controles.js` |
+| EXÉCUTER / REVUE HUMAINE | listes et brouillons en privé ; tout geste sortant en file de revue | `src/cycle.js` |
+| MESURER / APPRENDRE / RÉVISER | KPI réels (« inconnu » sous le seuil), leçons, seul un pari gagné élève une croyance | `src/bilan.js`, `src/monde.js` |
+| DREAMING | audit hebdomadaire : registre, antifuite, rejeu des contrôles, « moteur sans client » | `src/bilan.js` |
+
+Socle : registre en ajout seul chaîné SHA-256 et antifuite (`src/registre.js`, `src/garde.js`), porte réseau
+unique à liste blanche et budget (`src/socle.js`), recettes déclaratives sans code (`etat/recettes/*.json`).
 
 ```bash
-NODE_USE_ENV_PROXY=1 node bin/velyx.js marche              # demande publiée sur codeur.com, concurrence par catégorie
-NODE_USE_ENV_PROXY=1 node bin/velyx.js cibler <recette>    # liste à signaux depuis SIRENE/RNE → prive/
-node bin/velyx.js brouillon <recette>                      # proposition + pari → prive/
-node bin/velyx.js etat                                     # € encaissés, paris ouverts, gestes attendus
-npm test && node bin/velyx.js verifier
+npm test && node bin/velyx.js verifier            # 230 tests ; registre + antifuite
+NODE_USE_ENV_PROXY=1 node bin/velyx.js cycle      # cycle du jour (idempotent)
+node bin/velyx.js revue                           # gestes attendus du propriétaire
+node bin/velyx.js etat                            # argent encaissé, paris, gestes
+node bin/velyx                                    # toutes les commandes
 ```
 
-Node ≥ 20, aucune dépendance, 0 € de dépense (deux sources publiques gratuites). `NODE_USE_ENV_PROXY=1` n'est utile que
-derrière un proxy. `prive/` est ignoré par git : les listes contiennent des noms de dirigeants et ce dépôt est public.
+Node ≥ 20, aucune dépendance. Le cycle quotidien suit `.claude/skills/velyx-cycle/SKILL.md`.
 
-## Ce qui a été mesuré le 15 novembre 2026 (données réelles, pas de simulation)
+## L'offre en cours (fondée sur `reports/Marché fichiers prospection à signaux.md`)
 
-**Le marché.** 169 projets publiés sur codeur.com, dont 143 ouverts depuis moins de 14 jours. Médiane : 38 offres par
-projet. Les projets de développement sont saturés (sites, SaaS, applications : **100 à 190 offres** chacun). La
-**prospection commerciale et le télémarketing** cumulent le plus de demandes (26 en 14 jours) pour une médiane de
-**5 offres**. C'est là qu'un nouvel entrant a une chance réelle.
+Fichier des **entreprises du BTP immatriculées récemment** sur un département (`btp-creations-zone`), vendu au
+forfait aux **courtiers en assurance construction** (`courtiers-construction`) : la décennale est obligatoire à
+l'ouverture de tout chantier (C. assurances, art. L241-1), ces courtiers paient déjà 9 à 110 € un lead, aucun vendeur
+ne propose ce croisement. Conformité : oppositions à la prospection exclues, diffusion partielle exclue, source et
+date citées, aucun nom de dirigeant dans les échantillons. Prix : repères cités, fixés par le propriétaire.
 
-**Ce que ces clients veulent vraiment.** Sur 31 annonces de prospection lues en entier, la plupart achètent des appels,
-mais plusieurs achètent d'abord **qui appeler** : « constituer une base de 150 entreprises du BTP » (800 € HT),
-« identifier des micro-entreprises IT en Île-de-France », « collecte et enrichissement de fiches entreprises ».
+## Mesuré, pas simulé
+- 15–16/11/2026, codeur.com : le développement est saturé (100–190 offres par projet) ; la prospection reçoit
+  5 offres médianes. Y répondre coûte 31,90 € HT/30 j : codeur.com sert à **lire** la demande, pas à y répondre.
+- Contrôles : 246 des 1 111 sociétés IT lues et 9 des 10 de l'échantillon BTP v1 étaient **opposées à la
+  prospection** : les brouillons v1 ont été retirés avant tout envoi, l'exclusion est devenue un contrôle bloquant.
+- **Argent encaissé : 0 €. Dépensé : 0 €.**
 
-**Deux listes construites pour deux annonces précises** (registre SIRENE/RNE, lecture complète, contrôle manuel) :
+## Gestes du propriétaire
+1. Statut pour facturer (micro-entreprise, gratuit) : `docs/statut-micro-entreprise.md`.
+2. Nom commercial : NOVARYS est déjà porté par d'autres entreprises ; à confirmer (base des marques INPI).
+3. Ouvrir un canal gratuit (e-mail direct, ComeUp ou Malt), relire la revue, fixer le prix, envoyer.
 
-| Recette | Annonce | Résultat |
-|---|---|---|
-| `rachat-it-idf` | rachat de portefeuilles clients IT, Île-de-France (18 offres) | 862 micro-entreprises IT (définition INSEE) dont le dirigeant a 62 ans ou plus ; 378 ont plus de 15 ans ; 178 bénéficiaires sur des comptes de moins de 3 ans |
-| `courtier-btp-aura` | courtier en assurance BTP, rendez-vous en Rhône-Alpes (4 offres, 125 € TTC par rendez-vous honoré) | au moins 5 037 PME de 6 à 99 salariés dans les 8 départements (6 250 fiches lues sur 7 424) : 46 immatriculées depuis moins de 3 ans, 1 586 RGE, 182 promoteurs ou constructeurs ; CA et dirigeant déjà connus pour 1 119 |
-
-Le signal de la première, l'âge du dirigeant comme indice de transmission, n'apparaît dans aucune des annonces lues.
-Celui de la seconde, l'entreprise récente qui doit justifier d'une décennale à l'ouverture de tout chantier
-(C. assurances, art. L241-1), reprend le premier critère du client et le rend filtrable.
-
-**Biais trouvés à la main et corrigés avant tout envoi.** Une holding à 1 Md€ de CA déclarée « 1-2 salariés » passait
-pour une micro-entreprise : la définition INSEE (CA ≤ 2 M€, ni ETI ni grande entreprise) l'écarte désormais.
-Des comptes de 2017 faisaient dire « rentable » : seuls les comptes de moins de trois ans comptent (336 → 178).
-Des filiales de groupes (Eiffage…) arrivaient en tête chez un courtier de PME : seule la catégorie INSEE « PME » reste
-(327 écartées). Une immatriculation récente peut être une reprise : le brouillon le dit au lieu de l'affirmer.
-Limites consignées au registre (actes `aveu`) : lecture BTP incomplète, Bruxelles non couvert.
-
-**Argent encaissé : 0 €.** Aucune proposition n'est encore partie.
-
-Étude de marché sourcée (concurrents, prix payés, cadre RGPD/CNIL, canaux à 0 €) : `reports/Marché fichiers prospection à signaux.md`.
-
-## Gestes du propriétaire (rien ne part sans lui)
-
-Mandat du 15/11/2026 : **0 € avant le premier encaissement** (`politique.json`). codeur.com sert à **lire** la demande ;
-y répondre coûte au moins 31,90 € HT par 30 jours (page tarifs, lue le 15/11/2026) : exclu.
-
-1. Choisir un canal gratuit : e-mail direct depuis sa propre adresse (B2B, objet lié au métier du destinataire,
-   information et opposition), service ComeUp (publication gratuite, 20 % prélevés sur les ventes seulement) ou
-   profil Malt (commission sur les missions seulement). Voir `reports/Marché fichiers prospection à signaux.md`.
-2. Relire le brouillon préparé dans `prive/`, fixer le prix (laissé en blanc exprès), envoyer, puis
-   `node bin/velyx.js envoye <pari> --canal <canal>`.
-3. Pour encaisser : un statut immatriculé (micro-entreprise : inscription gratuite). Consigner l'issue
-   (`reponse <pari> <issue>`) et tout paiement (`encaisse <eur> <preuve>`).
-
-## Règles
-
-- Une recette répond à une annonce réelle ; chaque signal cite la règle publique ou le critère écrit par le client.
-- Un brouillon naît avec son pari : critère de succès et critère d'arrêt écrits **avant** l'envoi.
-- Le registre (`registre/journal.jsonl`) est en ajout seul et chaîné ; il refuse un envoi, un encaissement ou une
-  dépense qui ne viennent pas du propriétaire.
-- Aucun chiffre sans source datée ; « inconnu » plutôt qu'une estimation.
+## Reporté (assumé)
+Mémoire privée persistante entre conteneurs (Drive), gestes par commentaires GitHub, crochet de session, registre
+belge (BCE), preuve d'identité du propriétaire en terminal partagé.
