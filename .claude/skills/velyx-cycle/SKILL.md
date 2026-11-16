@@ -63,9 +63,29 @@ Une fuite signalée par `garde` s'écrit dans le résumé ; ne rien corriger à 
 Le message final est la sortie exacte de `node bin/velyx.js notification` (300 caractères au plus, sans nom). Vide :
 aucun message.
 
+## Pas 7. Remettre les revues au propriétaire (Google Drive, privé)
+
+Pour chaque fichier `prive/revues/R-<jour>-*.md` créé aujourd'hui : créer un document dans le Google Drive du
+propriétaire (connecteur Google Drive, `create_file`), titre « VELYX — <R-id> », contenu = le fichier tel quel, dans le
+dossier « VELYX — revues » s'il existe (sinon à la racine). Ne jamais partager, déplacer ni supprimer un fichier Drive.
+Aucun fichier de `prive/listes/` ni `prive/cache/` ne part dans Drive.
+
+## Pas 8. Conserver l'état public (autorisation du propriétaire du 15/11/2026)
+
+Si `etat/` ou `registre/` ont changé :
+
+```bash
+npm test && node bin/velyx.js verifier && node bin/velyx.js garde
+git add etat registre && git commit -m "Cycle du <jour> : état public"
+```
+
+Pousser sur la branche de travail de la session, ouvrir une PR vers `main`, attendre la CI (tests + antifuite), et la
+fusionner seulement si elle est verte. Rien d'autre que `etat/` et `registre/` dans ce commit. CI rouge : ne pas fusionner,
+le dire dans le résumé.
+
 ## Interdits
 
 - Rien ne part vers un tiers : pas de message, pas de publication, pas d'inscription, pas de prix, pas de dépense.
   Ce sont des gestes du propriétaire, préparés en revue (`velyx revue`).
 - Aucune commande réservée au propriétaire (validation, geste, envoi, réponse, encaissement).
-- Pas de modification de `politique.json`, du registre, du code ni des recettes ; pas de commit ni de push.
+- Pas de modification de `politique.json`, du registre à la main, du code ni des recettes ; aucun commit ni push hors du pas 8.
