@@ -38,3 +38,10 @@ Le dépôt est public : aucune donnée personnelle dans `memory/` ni `TASKS.md`.
 - Carte : `bin/velyx.js` (commandes), `src/` (`cycle`, `recettes`, `brouillons`, `controles`, `risque`, `registre`, `garde`,
   `monde`, `strategie`, `bilan`, `site`, `sources/`), `etat/` (état public), `registre/journal.jsonl` (actes, ajout seul),
   `prive/` (listes et fiches nominatives, hors git), `test/`, `reports/` (étude de marché).
+
+## Persistance de `prive/` (hors dépôt)
+- `prive/` ne vit que dans le conteneur. Une revue dont le texte a disparu ne peut plus être validée (`valider` refuse).
+- Fin de cycle : sauvegarder `prive/` sauf `prive/cache/` dans les deux espaces privés du propriétaire (artefact
+  privé, collection `velyx-prive` ; dossier Drive privé « Velyx - privé (sauvegarde) »).
+- Début de session : si `prive/revues/` est absent, restaurer depuis ces espaces avant toute validation.
+- Ne jamais écrire le contenu de `prive/` dans ce dépôt, même dans un commentaire ou un journal.
