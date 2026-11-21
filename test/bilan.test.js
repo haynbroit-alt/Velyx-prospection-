@@ -75,7 +75,7 @@ test('2 envois → taux_reponse_positive_7j = null, affiché « inconnu (n=2) »
   assert.equal(kpi.taux_reponse_positive_7j.affichage, 'inconnu (n=2)');
   assert.equal(kpi.taux_reponse_positive_7j.n, 2);
   assert.equal(kpi.envois.valeur, 2);
-  assert.deepEqual(kpi.envois.detail.par_canal, { email: 2 });
+  assert.deepEqual(kpi.envois.detail.par_canal, { canal_email: 2 });
   // Avant l'échéance, les envois n'entrent pas au dénominateur.
   const b2 = banc();
   b2.registre.ajouter(pari('P-c')); b2.registre.ajouter(envoi('P-c'));
@@ -353,13 +353,14 @@ test('acte audit admis par le registre ; rêve le dimanche (jour de Paris)', () 
   assert.equal(estJourDeReve(creerHorloge('2026-11-15T23:30:00Z')), false, 'déjà lundi à Paris');
 });
 
-test('registre réel : KPI mesurables sans rien inventer (0 €, aucun envoi, inconnu sous les seuils)', () => {
+test('registre réel : KPI mesurables sans rien inventer (0 €, envois = actes du registre, inconnu sous les seuils)', () => {
   const reel = new Registre(path.join(RACINE, 'registre', 'journal.jsonl'));
   const { kpi } = mesurer({ registre: reel, horloge: creerHorloge('2026-11-16T10:00:00Z') });
   assert.equal(kpi.encaisse_eur.valeur, 0);
   assert.equal(kpi.depense_eur.valeur, 0);
-  assert.equal(kpi.envois.valeur, 0);
-  assert.equal(kpi.taux_reponse_positive_7j.affichage, 'inconnu (n=0)');
+  // Le registre réel vit : les envois comptés sont les actes « envoi » du propriétaire, jamais un nombre figé.
+  assert.equal(kpi.envois.valeur, reel.de('envoi').length);
+  assert.match(kpi.taux_reponse_positive_7j.affichage, /^inconnu \(n=\d+\)$/);
   assert.equal(verifierObjetPublic(kpi, null).ok, true);
 });
 

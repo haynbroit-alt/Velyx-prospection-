@@ -37,7 +37,7 @@ test('le journal réel passe verifier() après extension, mandat de la ligne 14 
   assert.equal(l.precedente, r.lignes[n - 1].empreinte);
   assert.equal(l.date, '2026-11-16T05:41:00.000Z');
   assert.deepEqual(new Registre(f).verifier(), { ok: true, lignes: n + 1 });
-  assert.equal(r.etat().dernier_geste_proprietaire, r.de('mandat').at(-1).date, 'dernier acte du propriétaire : un mandat');
+  assert.equal(r.etat().dernier_geste_proprietaire, r.lignes.filter((x) => x.auteur === 'proprietaire').at(-1).date, 'dernier acte du propriétaire');
 });
 
 test('EXIGE couvre chaque type d’acte ; CLES suit le format de la spécification', () => {
