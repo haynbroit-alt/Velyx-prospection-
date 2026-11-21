@@ -108,7 +108,7 @@ export function construireSite(etatPublic = {}, { jour, mentions_legales = null,
   const pSrc = p.source ?? kpi.envois?.source, pDate = p.date ?? kpi.envois?.date;
   const parCanal = p.par_canal ?? kpi.envois?.detail?.par_canal ?? {};
   const canaux = Object.entries(parCanal).sort(([a], [b]) => a.localeCompare(b))
-    .map(([c, v]) => `<li>${txt(c, pSrc, pDate)} : ${n(`envois.${c}`, typeof v === 'number' ? v : v?.envoyes, pSrc, pDate, 'n')}</li>`).join('');
+    .map(([c, v]) => `<li>${txt(c.replace(/^canal_/, ''), pSrc, pDate)} : ${n(`envois.${c}`, typeof v === 'number' ? v : v?.envoyes, pSrc, pDate, 'n')}</li>`).join('');
   const issues = p.par_issue ? `<ul>${ISSUES_AFFICHEES.map(([cle, l]) => `<li>${esc(l)} : ${n(`issues.${cle}`, Number(p.par_issue[cle] ?? 0), pSrc, pDate, 'n')}</li>`).join('')}</ul>` : '';
   const aveux = Number.isFinite(p.aveux) ? `<p>Échecs et aveux consignés : ${n('aveux', p.aveux, pSrc, pDate, 'n')}.</p>` : '';
   sections.push(`<section><h2>Le registre public</h2>
