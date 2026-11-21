@@ -143,7 +143,8 @@ export function mesurer({ registre, series = [], horloge = creerHorloge(), git =
   // K3 à K5 : envois et issues.
   const envois = L.filter((l) => l.type === 'envoi' && l.auteur === 'proprietaire');
   const parCanal = {};
-  for (const e of envois) parCanal[e.canal ?? 'inconnu'] = (parCanal[e.canal ?? 'inconnu'] ?? 0) + 1;
+  // Clé préfixée : un canal nommé « email » ne doit pas produire une clé publique « email », refusée par l'antifuite.
+  for (const e of envois) { const k = `canal_${e.canal ?? 'inconnu'}`; parCanal[k] = (parCanal[k] ?? 0) + 1; }
   poser('envois', envois.length, envois.length, { detail: { par_canal: parCanal } });
   const premier = new Map();
   for (const e of envois) if (!premier.has(e.pari)) premier.set(e.pari, e);
