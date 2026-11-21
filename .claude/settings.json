@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "bashOutputMaxChars": 15000,
+  "permissions": {
+    "deny": [
+      "Read(node_modules/**)",
+      "Read(package-lock.json)",
+      "Read(prive/cache/**)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/garde_pipe.py\""
+          }
+        ]
+      }
+    ]
+  }
+}

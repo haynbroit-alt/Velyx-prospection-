@@ -1,6 +1,6 @@
 {
  "version": 1,
- "maj_le": "2026-11-16T03:15:59.408Z",
+ "maj_le": "2026-11-21T08:22:35.997Z",
  "croyances": [
   {
    "id": "B01",
@@ -59,10 +59,12 @@
    "id": "B03",
    "nature": "marche",
    "enonce": "La prospection commerciale et le télémarketing sont peu concurrencés sur codeur.com : médiane de 5 offres le 15/11 (169 annonces lues, une seule date) contre 100 à 190 en développement. Observée si la médiane reste ≤ 10 (n ≥ 5) à une seconde date, parseur sain ; contestée puis réfutée si elle dépasse 15 deux lectures de suite.",
-   "niveau": "hypothese",
+   "niveau": "observee",
    "preuves": [
     1,
-    11
+    11,
+    27,
+    62
    ],
    "test": {
     "sujet": "segment:prospection",
@@ -80,7 +82,7 @@
     "min_n": 5,
     "consecutifs": 2
    },
-   "revisee_le": null,
+   "revisee_le": "2026-11-21T08:22:35.997Z",
    "etiquette": null,
    "source": null,
    "trace": {
@@ -89,6 +91,11 @@
       "fait": "fait:segment:prospection:mediane_offres:2026-11-16",
       "jour": "2026-11-16",
       "ligne": 27
+     },
+     {
+      "fait": "fait:segment:prospection:mediane_offres:2026-11-21",
+      "jour": "2026-11-21",
+      "ligne": 62
      }
     ],
     "contradictions": [],
@@ -416,6 +423,11 @@
       "fait": "fait:parseur:codeur:sain:2026-11-16",
       "jour": "2026-11-16",
       "ligne": 26
+     },
+     {
+      "fait": "fait:parseur:codeur:sain:2026-11-21",
+      "jour": "2026-11-21",
+      "ligne": 61
      }
     ],
     "contradictions": [],

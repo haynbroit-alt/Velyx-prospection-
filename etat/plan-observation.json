@@ -1,8 +1,8 @@
 {
- "jour": "2026-11-17",
+ "jour": "2026-11-22",
  "suivis": [
   {
-   "id": "492760",
+   "id": "493215",
    "motif": "donnees"
   }
  ],
@@ -10,8 +10,19 @@
  "pages": [
   {
    "canal": "codeur",
-   "chemin": "/pages/termes-et-conditions-d-utilisation"
+   "chemin": "/pages/tarifs-codeur-com"
   }
  ],
- "sondes": []
+ "sondes": [
+  {
+   "recette": "btp-creations-zone",
+   "params": {
+    "activite_principale": "43.99C,43.91A,43.91B,43.99A,41.20A,41.20B,43.12A,43.11Z",
+    "departement": "69",
+    "tranche_effectif_salarie": "NN,00,01,02,03",
+    "etat_administratif": "A",
+    "nature_juridique": "5710,5499"
+   }
+  }
+ ]
 }
